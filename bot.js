@@ -16,7 +16,7 @@ const { simpleParser } = require('mailparser');
 // ============================================================
 
 const CONFIG = {
-    TELEGRAM_TOKEN: '8623886488:AAEcxr4qOgIxtwUQ_eUPb9btuXKOxId6kBU',
+    TELEGRAM_TOKEN: '8884594440:AAEFSNSoNNRhkaZuux0VhuzhZT2U5MSOjwQ',
     OWNER_ID: 8659926441,
     PROFILE_PHOTO_URL: 'https://files.catbox.moe/gsyfb0.jpg',
     EMAIL_SENDER: 'shrhhubsibsisb123@gmail.com',
