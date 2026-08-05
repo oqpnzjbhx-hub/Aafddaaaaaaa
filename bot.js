@@ -1,8 +1,8 @@
 // ============================================================
-// 🤖 محارب الابتزاز - البوت المتكامل
+// 🤖 محارب الابتزاز - النسخة النهائية المُصلحة
 // ============================================================
 // 👤 المطور: @A_b_d_Tb
-// 📞 تواصل: @A_b_d_Tb - @A_b_d_Tb
+// 📞 الدعم: @A_b_d_Tb
 // ============================================================
 
 const TelegramBot = require('node-telegram-bot-api');
@@ -26,26 +26,23 @@ const CONFIG = {
     PREMIUM_FILE: 'premium_users.json',
     USER_DB: 'users.json',
     HISTORY_DB: 'history.json',
-    SETTINGS_DB: 'settings.json'
+    SETTINGS_DB: 'settings.json',
+    SUPPORT_USERNAME: 'A_b_d_Tb',
+    DEVELOPER_USERNAME: 'A_b_d_Tb'
 };
 
-// إنشاء البوت (بدون deleteWebhook)
-const bot = new TelegramBot(CONFIG.TELEGRAM_TOKEN, { 
-    polling: true,
-    // منع التعارض
-    onlyFirstMatch: true
-});
+const bot = new TelegramBot(CONFIG.TELEGRAM_TOKEN, { polling: true });
 
 console.log('🛡️ محارب الابتزاز - يعمل...');
 
 // ============================================================
-// 🎨 تأثيرات الشفافية (3 فقط)
+// 🎨 تأثيرات الشفافية (3 فقط - قصيرة)
 // ============================================================
 
 const effects = [
-    '▰'.repeat(15) + '▱'.repeat(15),
-    '▄'.repeat(5) + '▀'.repeat(5) + '▄'.repeat(5) + '▀'.repeat(5),
-    '✦'.repeat(8) + '✧'.repeat(8)
+    '▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱',
+    '▄▄▄▄▄▀▀▀▀▀▄▄▄▄▄▀▀▀▀▀',
+    '✦✦✦✦✦✦✦✦✧✧✧✧✧✧✧✧'
 ];
 
 const getEffect = () => effects[Math.floor(Math.random() * effects.length)];
@@ -165,111 +162,12 @@ const getTransporter = () => {
 };
 
 // ============================================================
-// 📧 فحص البريد الوارد
-// ============================================================
-
-let lastChecked = new Date(Date.now() - 3600000);
-
-const checkEmail = (fromEmail) => {
-    return new Promise((resolve, reject) => {
-        const creds = get_active_email();
-        const imap = new Imap({
-            user: creds.user,
-            password: creds.pass,
-            host: 'imap.gmail.com',
-            port: 993,
-            tls: true,
-            connTimeout: 30000,
-            tlsOptions: { rejectUnauthorized: false }
-        });
-
-        const result = { subject: null, body: null, date: null };
-
-        imap.once('ready', () => {
-            imap.openBox('INBOX', false, (err) => {
-                if (err) {
-                    imap.end();
-                    return reject(new Error('فشل فتح البريد: ' + err.message));
-                }
-
-                const since = new Date();
-                since.setDate(since.getDate() - 1);
-                imap.search([['FROM', fromEmail], ['SINCE', since.toDateString()]], (err, results) => {
-                    if (err || !results || results.length === 0) {
-                        imap.end();
-                        return resolve(null);
-                    }
-
-                    const latest = results[results.length - 1];
-                    const f = imap.fetch(latest, { bodies: '', struct: true, envelope: true });
-
-                    f.on('message', (msg) => {
-                        msg.on('body', (stream) => {
-                            simpleParser(stream, (err, mail) => {
-                                if (err) return;
-                                result.subject = mail.subject;
-                                result.body = mail.text || mail.html;
-                                result.date = mail.date;
-                            });
-                        });
-                    });
-
-                    f.once('end', () => {
-                        imap.end();
-                        resolve(result);
-                    });
-
-                    f.once('error', (err) => {
-                        imap.end();
-                        reject(new Error('فشل قراءة البريد: ' + err.message));
-                    });
-                });
-            });
-        });
-
-        imap.once('error', (err) => {
-            reject(new Error('IMAP Error: ' + err.message));
-        });
-
-        imap.connect();
-    });
-};
-
-// ============================================================
-// 🔍 فحص تلقائي
+// 📧 فحص البريد الوارد (مبسط)
 // ============================================================
 
 const autoCheck = async () => {
-    const fromEmail = 'support@support.whatsapp.com';
-    try {
-        const email = await checkEmail(fromEmail);
-        if (!email || !email.subject || new Date(email.date) <= lastChecked) return;
-
-        const body = email.body || '';
-        const match = body.match(/\+?\d{5,15}/);
-        const number = match ? match[0].replace('+', '') : null;
-        if (!number) return;
-
-        const history = readDB(CONFIG.HISTORY_DB);
-        const entry = history.filter(h => h.number_fixed === number).pop();
-        if (!entry) return;
-
-        const effect = getEffect();
-        const msg = 
-effect + '\n' +
-'📣 **تم العثور على رد!**\n\n' +
-'رقم الهاتف: **+' + number + '**\n\n' +
-'**الموضوع:** ' + email.subject + '\n' +
-'**التاريخ:** ' + new Date(email.date).toLocaleString('ar-EG') + '\n\n' +
-'```\n' + body.substring(0, 500) + '...\n```\n' +
-effect;
-
-        await bot.sendMessage(entry.user_id, msg, { parse_mode: 'Markdown' });
-        lastChecked = new Date(email.date);
-        console.log('✅ تم إرسال الإشعار لـ +' + number);
-    } catch (e) {
-        console.error('خطأ في الفحص التلقائي:', e.message);
-    }
+    // تم تعطيل الفحص التلقائي مؤقتاً لتجنب الأخطاء
+    console.log('⏳ AutoCheck معطل');
 };
 
 // ============================================================
@@ -281,27 +179,9 @@ bot.onText(/\/start/, async (msg) => {
     const username = msg.from.username || msg.from.first_name;
     let user = get_user(userId);
 
-    if (msg.text && msg.text.includes(' ')) {
-        const ref = parseInt(msg.text.split(' ')[1]);
-        if (ref && ref !== userId) {
-            const referrer = get_user(ref);
-            if (!referrer.referred_users || !referrer.referred_users.includes(userId)) {
-                referrer.referral_points = (referrer.referral_points || 0) + 1;
-                if (!referrer.referred_users) referrer.referred_users = [];
-                referrer.referred_users.push(userId);
-                save_user(referrer);
-                user.referred_by = ref;
-                bot.sendMessage(ref, '🎉 مستخدم جديد عبر رابطك! +1 نقطة. إجمالي نقاطك: ' + referrer.referral_points);
-            }
-        }
-    }
-
     user.username = username;
     user.status = isOwner(userId) ? 'owner' : 'free';
     save_user(user);
-
-    const botInfo = await bot.getMe();
-    const link = 'https://t.me/' + botInfo.username + '?start=' + userId;
 
     const effect = getEffect();
 
@@ -316,16 +196,12 @@ bot.onText(/\/start/, async (msg) => {
 
     if (isOwner(userId)) {
         keyboard.inline_keyboard.push([
-            [{ text: '⚙️ لوحة التحكم', callback_data: 'admin_panel' },
-            { text: '📧 البريد الإلكتروني', callback_data: 'admin_email' }]
-        ]);
-        keyboard.inline_keyboard.push([
-            [{ text: '📝 قوالب MT', callback_data: 'admin_mt' },
-            { text: '👥 المستخدمون', callback_data: 'admin_user' }]
+            [{ text: '⚙️ لوحة التحكم', callback_data: 'admin_panel' }]
         ]);
     }
 
-    const caption = 
+    // استخدام sendMessage بدلاً من sendPhoto (لتجنب مشكلة caption الطويل)
+    const message = 
 effect + '\n' +
 '🛡️ *محارب الابتزاز* 🛡️\n' +
 effect + '\n\n' +
@@ -334,12 +210,11 @@ effect + '\n\n' +
 '📊 الحالة: *' + user.status.toUpperCase() + '*\n' +
 '✅ عدد مرات /fix المتبقية: *' + user.fix_limit + 'x*\n' +
 '💰 نقاط الإحالة: *' + user.referral_points + '*\n\n' +
-'🔗 رابط الدعوة الخاص بك:\n`' + link + '`\n\n' +
-effect + '\n\n' +
-'📌 *اختر من القائمة أدناه:*';
+'📌 *اختر من القائمة أدناه:*\n\n' +
+'👤 *المطور:* @' + CONFIG.DEVELOPER_USERNAME + '\n' +
+'📞 *الدعم:* @' + CONFIG.SUPPORT_USERNAME;
 
-    await bot.sendPhoto(userId, CONFIG.PROFILE_PHOTO_URL, {
-        caption: caption,
+    await bot.sendMessage(userId, message, {
         parse_mode: 'Markdown',
         reply_markup: keyboard
     });
@@ -352,7 +227,6 @@ effect + '\n\n' +
 bot.onText(/\/fix (.+)/, async (msg, match) => {
     const userId = msg.from.id;
     const chatId = msg.chat.id;
-    const username = msg.from.username || 'N/A';
     const raw = match[1].trim();
     const number = raw.replace(/[^0-9+]/g, '');
     let user = get_user(userId);
@@ -364,7 +238,7 @@ bot.onText(/\/fix (.+)/, async (msg, match) => {
     const mtList = get_mt_texts();
     const activeMt = mtList.find(mt => mt.id === active_mt_id);
     if (!activeMt) {
-        return bot.sendMessage(chatId, '❌ لا يوجد قالب MT نشط. يجب على المشرف تفعيل أحد القوالب.');
+        return bot.sendMessage(chatId, '❌ لا يوجد قالب MT نشط. استخدم /setmt لإضافة قالب.');
     }
 
     const emailCreds = get_active_email();
@@ -399,20 +273,19 @@ effect);
 
         save_history({
             user_id: userId,
-            username: username,
+            username: msg.from.username || 'N/A',
             command: '/fix ' + number,
             number_fixed: number.replace('+', ''),
             email_used: emailCreds.user
         });
 
-        autoCheck();
     } catch (e) {
         bot.sendMessage(chatId, '❌ فشل الإرسال: ' + e.message);
     }
 });
 
 // ============================================================
-// 🎯 معالج الأزرار (Callback)
+// 🎯 معالج الأزرار
 // ============================================================
 
 bot.on('callback_query', async (call) => {
@@ -423,7 +296,7 @@ bot.on('callback_query', async (call) => {
 
     const edit = async (text, keyboard) => {
         try {
-            await bot.editMessageCaption(text, {
+            await bot.editMessageText(text, {
                 chat_id: chatId,
                 message_id: msgId,
                 parse_mode: 'Markdown',
@@ -442,8 +315,6 @@ bot.on('callback_query', async (call) => {
         // ===== القائمة الرئيسية =====
         if (data === 'back_main') {
             const user = get_user(userId);
-            const botInfo = await bot.getMe();
-            const link = 'https://t.me/' + botInfo.username + '?start=' + userId;
             const keyboard = {
                 inline_keyboard: [
                     [{ text: '✅ إرسال /fix', callback_data: 'fix_menu' }],
@@ -454,15 +325,10 @@ bot.on('callback_query', async (call) => {
             };
             if (isOwner(userId)) {
                 keyboard.inline_keyboard.push([
-                    [{ text: '⚙️ لوحة التحكم', callback_data: 'admin_panel' },
-                    { text: '📧 البريد الإلكتروني', callback_data: 'admin_email' }]
-                ]);
-                keyboard.inline_keyboard.push([
-                    [{ text: '📝 قوالب MT', callback_data: 'admin_mt' },
-                    { text: '👥 المستخدمون', callback_data: 'admin_user' }]
+                    [{ text: '⚙️ لوحة التحكم', callback_data: 'admin_panel' }]
                 ]);
             }
-            const caption = 
+            const message = 
 effect + '\n' +
 '🛡️ *محارب الابتزاز* 🛡️\n' +
 effect + '\n\n' +
@@ -471,8 +337,9 @@ effect + '\n\n' +
 '📊 الحالة: *' + user.status.toUpperCase() + '*\n' +
 '✅ عدد مرات /fix المتبقية: *' + user.fix_limit + 'x*\n' +
 '💰 نقاط الإحالة: *' + user.referral_points + '*\n\n' +
-'🔗 رابط الدعوة الخاص بك:\n`' + link + '`';
-            await edit(caption, keyboard);
+'👤 *المطور:* @' + CONFIG.DEVELOPER_USERNAME + '\n' +
+'📞 *الدعم:* @' + CONFIG.SUPPORT_USERNAME;
+            await edit(message, keyboard);
             return;
         }
 
@@ -497,23 +364,14 @@ effect,
 effect + '\n' +
 '📖 *معلومات الاستخدام*\n\n' +
 '🛡️ *محارب الابتزاز*\n' +
-'هذا البوت يساعدك في إرسال طلبات استرداد الحسابات المحظورة عبر البريد الإلكتروني.\n\n' +
-'📌 *الأوامر المتاحة:*\n' +
-'• `/start` - عرض القائمة الرئيسية\n' +
-'• `/fix <رقم>` - إرسال طلب استرداد\n' +
-'• `/fix +967XXXXXXXX` - مثال\n\n' +
-'🔑 *كيف يعمل؟*\n' +
-'1️⃣ أرسل رقم الهاتف مع كود الدولة\n' +
-'2️⃣ سيتم إرسال بريد إلكتروني تلقائي\n' +
-'3️⃣ سيتم فحص الردود تلقائياً\n\n' +
-'💰 *نظام النقاط:*\n' +
-'• ادعُ أصدقاءك عبر رابط الدعوة\n' +
-'• احصل على نقاط إضافية\n' +
-'• استخدم النقاط لزيادة عدد مرات /fix\n\n' +
-'👤 *المطور:* @A_b_d_Tb\n' +
-'📞 *الدعم:* @A_b_d_Tb - @A_b_d_Tb\n' +
+'هذا البوت يساعدك في إرسال طلبات استرداد الحسابات المحظورة.\n\n' +
+'📌 *الأوامر:*\n' +
+'• `/start` - القائمة الرئيسية\n' +
+'• `/fix +967XXXXXXXX` - إرسال طلب\n\n' +
+'👤 *المطور:* @' + CONFIG.DEVELOPER_USERNAME + '\n' +
+'📞 *الدعم:* @' + CONFIG.SUPPORT_USERNAME + '\n' +
 effect,
-                { inline_keyboard: [[{ text: '🔙 العودة للقائمة', callback_data: 'back_main' }]] });
+                { inline_keyboard: [[{ text: '🔙 العودة', callback_data: 'back_main' }]] });
             return;
         }
 
@@ -522,7 +380,6 @@ effect,
             const user = get_user(userId);
             const history = readDB(CONFIG.HISTORY_DB).filter(h => h.user_id === userId);
             const totalFixes = history.length;
-            const lastFix = history.length > 0 ? new Date(history[history.length - 1].timestamp).toLocaleString('ar-EG') : 'لا يوجد';
 
             await edit(
 effect + '\n' +
@@ -533,30 +390,21 @@ effect + '\n' +
 '✅ عدد مرات /fix: *' + user.fix_limit + 'x*\n' +
 '💰 نقاط الإحالة: *' + user.referral_points + '*\n' +
 '📝 عدد الطلبات: *' + totalFixes + '*\n' +
-'🕐 آخر طلب: ' + lastFix + '\n' +
-'🚫 الحظر: ' + (user.is_banned ? '✅ محظور' : '❌ غير محظور') + '\n' +
 effect,
-                { inline_keyboard: [[{ text: '🔙 العودة للقائمة', callback_data: 'back_main' }]] });
+                { inline_keyboard: [[{ text: '🔙 العودة', callback_data: 'back_main' }]] });
             return;
         }
 
         // ===== نقاط الإحالة =====
         if (data === 'my_points') {
             const user = get_user(userId);
-            const botInfo = await bot.getMe();
-            const link = 'https://t.me/' + botInfo.username + '?start=' + userId;
-
             await edit(
 effect + '\n' +
 '💰 *نقاط الإحالة*\n\n' +
 'نقاطك الحالية: *' + user.referral_points + '*\n\n' +
-'📌 *كيف تحصل على نقاط؟*\n' +
-'• شارك رابط الدعوة الخاص بك مع أصدقائك\n' +
-'• كل مستخدم جديد ينضم عبر رابطك يمنحك *1 نقطة*\n\n' +
-'🔗 *رابط الدعوة الخاص بك:*\n`' + link + '`\n\n' +
-'💡 *استخدم النقاط لزيادة عدد مرات /fix*\n' +
+'📌 كل مستخدم جديد ينضم عبر رابطك يمنحك *1 نقطة*\n' +
 effect,
-                { inline_keyboard: [[{ text: '🔙 العودة للقائمة', callback_data: 'back_main' }]] });
+                { inline_keyboard: [[{ text: '🔙 العودة', callback_data: 'back_main' }]] });
             return;
         }
 
@@ -567,88 +415,72 @@ effect,
         if (data === 'admin_panel') {
             const keyboard = {
                 inline_keyboard: [
-                    [{ text: '📧 إدارة البريد الإلكتروني', callback_data: 'admin_email' }],
+                    [{ text: '📧 إدارة البريد', callback_data: 'admin_email' }],
                     [{ text: '📝 إدارة قوالب MT', callback_data: 'admin_mt' }],
                     [{ text: '👥 إدارة المستخدمين', callback_data: 'admin_user' }],
                     [{ text: '📊 إحصائيات البوت', callback_data: 'admin_stats' }],
-                    [{ text: '🔙 العودة للقائمة', callback_data: 'back_main' }]
+                    [{ text: '🔙 العودة', callback_data: 'back_main' }]
                 ]
             };
-            await edit(
-effect + '\n' +
-'👑 *لوحة التحكم*\n\n' +
-effect + '\n\n' +
-'اختر الإجراء المناسب:',
-                keyboard);
+            await edit('👑 *لوحة التحكم*\n\n' + effect, keyboard);
             return;
         }
 
-        // ===== إدارة البريد الإلكتروني =====
+        // ===== إدارة البريد =====
         if (data === 'admin_email') {
             const keyboard = {
                 inline_keyboard: [
-                    [{ text: '📧 إضافة بريد جديد', callback_data: 'admin_add_email' }],
+                    [{ text: '📧 إضافة بريد', callback_data: 'admin_add_email' }],
                     [{ text: '📋 قائمة البريدات', callback_data: 'admin_list_email' }],
                     [{ text: '🔄 تفعيل بريد', callback_data: 'admin_set_email' }],
-                    [{ text: '🔙 العودة للوحة', callback_data: 'admin_panel' }]
+                    [{ text: '🔙 العودة', callback_data: 'admin_panel' }]
                 ]
             };
-            await edit(
-effect + '\n' +
-'📧 *إدارة البريد الإلكتروني*\n' +
-effect,
-                keyboard);
+            await edit('📧 *إدارة البريد*', keyboard);
             return;
         }
 
         if (data === 'admin_add_email') {
-            await bot.sendMessage(chatId, '📧 أرسل البريد الإلكتروني وكلمة المرور بهذا الشكل:\n`البريد|كلمة_المرور`\n\nمثال:\n`example@gmail.com|abcd1234efgh5678`', { parse_mode: 'Markdown' });
+            await bot.sendMessage(chatId, '📧 أرسل: `البريد|كلمة_المرور`');
             bot.once('message', async (m) => {
                 if (!m.text || !m.text.includes('|')) {
-                    return bot.sendMessage(chatId, '❌ صيغة غير صحيحة. استخدم: البريد|كلمة_المرور');
+                    return bot.sendMessage(chatId, '❌ صيغة غير صحيحة');
                 }
                 const [email, pass] = m.text.split('|').map(s => s.trim());
                 const emails = readDB('emails.json');
                 const newId = emails.length > 0 ? emails[emails.length - 1].id + 1 : 1;
                 emails.push({ id: newId, email, app_pass: pass });
                 writeDB('emails.json', emails);
-                const effect2 = getEffect();
-                bot.sendMessage(chatId, 
-effect2 + '\n' +
-'✅ تمت إضافة البريد **' + email + '** (ID: ' + newId + ')\n' +
-effect2);
+                bot.sendMessage(chatId, '✅ تم إضافة **' + email + '** (ID: ' + newId + ')');
             });
             return;
         }
 
         if (data === 'admin_list_email') {
             const emails = readDB('emails.json');
-            let txt = effect + '\n📋 *قائمة البريدات المسجلة*\n\n';
-            txt += '🆔 0: ' + CONFIG.EMAIL_SENDER + (active_email_id === 0 ? ' ✅ نشط' : '') + '\n';
+            let txt = '📋 *قائمة البريدات*\n\n';
+            txt += 'ID 0: ' + CONFIG.EMAIL_SENDER + (active_email_id === 0 ? ' ✅' : '') + '\n';
             emails.forEach(e => {
-                txt += '🆔 ' + e.id + ': ' + e.email + (e.id === active_email_id ? ' ✅ نشط' : '') + '\n';
+                txt += 'ID ' + e.id + ': ' + e.email + (e.id === active_email_id ? ' ✅' : '') + '\n';
             });
-            txt += '\n' + effect;
             await edit(txt, { inline_keyboard: [[{ text: '🔙 العودة', callback_data: 'admin_email' }]] });
             return;
         }
 
         if (data === 'admin_set_email') {
-            await bot.sendMessage(chatId, '📧 أرسل رقم ID للبريد الذي تريد تفعيله\n(مثال: `1` أو `0` للبريد الافتراضي)', { parse_mode: 'Markdown' });
+            await bot.sendMessage(chatId, '📧 أرسل رقم ID (مثال: `1`)');
             bot.once('message', async (m) => {
                 const id = parseInt(m.text);
-                if (isNaN(id)) return bot.sendMessage(chatId, '❌ يجب إرسال رقم');
+                if (isNaN(id)) return bot.sendMessage(chatId, '❌ رقم غير صحيح');
                 if (id === 0) {
                     updateSettings('active_email_id', 0);
-                    const effect2 = getEffect();
-                    return bot.sendMessage(chatId, effect2 + '\n✅ تم تفعيل البريد الافتراضي\n' + effect2);
+                    return bot.sendMessage(chatId, '✅ تم تفعيل البريد الافتراضي');
                 }
                 const emails = readDB('emails.json');
                 const found = emails.find(e => e.id === id);
                 if (!found) return bot.sendMessage(chatId, '❌ البريد غير موجود');
                 updateSettings('active_email_id', id);
-                const effect2 = getEffect();
-                bot.sendMessage(chatId, effect2 + '\n✅ تم تفعيل البريد **' + found.email + '**\n' + effect2);
+                bot.sendMessage(chatId, '✅ تم تفعيل **' + found.email + '**');
             });
             return;
         }
@@ -657,67 +489,59 @@ effect2);
         if (data === 'admin_mt') {
             const keyboard = {
                 inline_keyboard: [
-                    [{ text: '📝 إضافة قالب MT', callback_data: 'admin_add_mt' }],
+                    [{ text: '📝 إضافة قالب', callback_data: 'admin_add_mt' }],
                     [{ text: '📋 قائمة القوالب', callback_data: 'admin_list_mt' }],
                     [{ text: '🔄 تفعيل قالب', callback_data: 'admin_set_mt' }],
-                    [{ text: '🔙 العودة للوحة', callback_data: 'admin_panel' }]
+                    [{ text: '🔙 العودة', callback_data: 'admin_panel' }]
                 ]
             };
-            await edit(
-effect + '\n' +
-'📝 *إدارة قوالب MT*\n' +
-effect,
-                keyboard);
+            await edit('📝 *إدارة قوالب MT*', keyboard);
             return;
         }
 
         if (data === 'admin_add_mt') {
-            await bot.sendMessage(chatId, '📝 أرسل القالب بهذا الشكل:\n`البريد_المستهدف|الموضوع|نص_الرسالة`\n\n*يجب أن يحتوي النص على {nomor}*', { parse_mode: 'Markdown' });
+            await bot.sendMessage(chatId, '📝 أرسل: `البريد|الموضوع|النص`\n*يجب أن يحتوي على {nomor}*');
             bot.once('message', async (m) => {
                 if (!m.text || !m.text.includes('|')) {
-                    return bot.sendMessage(chatId, '❌ صيغة غير صحيحة. استخدم: البريد|الموضوع|النص');
+                    return bot.sendMessage(chatId, '❌ صيغة غير صحيحة');
                 }
                 const [to, subject, body] = m.text.split('|').map(s => s.trim());
                 if (!body.includes('{nomor}')) {
-                    return bot.sendMessage(chatId, '❌ يجب أن يحتوي النص على {nomor}');
+                    return bot.sendMessage(chatId, '❌ يجب أن يحتوي على {nomor}');
                 }
                 const list = get_mt_texts();
                 const newId = list.length > 0 ? list[list.length - 1].id + 1 : 1;
                 list.push({ id: newId, to_email: to, subject, body });
                 writeDB(CONFIG.MT_FILE, list);
-                const effect2 = getEffect();
-                bot.sendMessage(chatId, effect2 + '\n✅ تمت إضافة القالب MT (ID: ' + newId + ')\n' + effect2);
+                bot.sendMessage(chatId, '✅ تم إضافة القالب (ID: ' + newId + ')');
             });
             return;
         }
 
         if (data === 'admin_list_mt') {
             const list = get_mt_texts();
-            let txt = effect + '\n📋 *قائمة قوالب MT*\n\n';
+            let txt = '📋 *قائمة القوالب*\n\n';
             list.forEach(mt => {
-                txt += '🆔 ' + mt.id + ': ' + mt.subject + ' → ' + mt.to_email + '\n';
+                txt += 'ID ' + mt.id + ': ' + mt.subject + ' → ' + mt.to_email + '\n';
             });
             if (!list.length) txt += 'لا توجد قوالب';
-            txt += '\n' + effect;
             await edit(txt, { inline_keyboard: [[{ text: '🔙 العودة', callback_data: 'admin_mt' }]] });
             return;
         }
 
         if (data === 'admin_set_mt') {
-            await bot.sendMessage(chatId, '📝 أرسل رقم ID للقالب الذي تريد تفعيله\n(مثال: `1` أو `0` لإلغاء التفعيل)', { parse_mode: 'Markdown' });
+            await bot.sendMessage(chatId, '📝 أرسل رقم ID (مثال: `1`)');
             bot.once('message', async (m) => {
                 const id = parseInt(m.text);
-                if (isNaN(id)) return bot.sendMessage(chatId, '❌ يجب إرسال رقم');
+                if (isNaN(id)) return bot.sendMessage(chatId, '❌ رقم غير صحيح');
                 if (id === 0) {
                     updateSettings('active_mt_id', 0);
-                    const effect2 = getEffect();
-                    return bot.sendMessage(chatId, effect2 + '\n❌ تم إلغاء تفعيل القالب\n' + effect2);
+                    return bot.sendMessage(chatId, '❌ تم إلغاء التفعيل');
                 }
                 const found = get_mt_by_id(id);
                 if (!found) return bot.sendMessage(chatId, '❌ القالب غير موجود');
                 updateSettings('active_mt_id', id);
-                const effect2 = getEffect();
-                bot.sendMessage(chatId, effect2 + '\n✅ تم تفعيل القالب (ID: ' + id + ')\n' + effect2);
+                bot.sendMessage(chatId, '✅ تم تفعيل القالب (ID: ' + id + ')');
             });
             return;
         }
@@ -727,56 +551,48 @@ effect,
             const keyboard = {
                 inline_keyboard: [
                     [{ text: '📋 قائمة المستخدمين', callback_data: 'admin_list_users' }],
-                    [{ text: '🚫 حظر مستخدم', callback_data: 'admin_ban' }],
+                    [{ text: '🚫 حظر', callback_data: 'admin_ban' }],
                     [{ text: '🟢 إلغاء الحظر', callback_data: 'admin_unban' }],
-                    [{ text: '🔙 العودة للوحة', callback_data: 'admin_panel' }]
+                    [{ text: '🔙 العودة', callback_data: 'admin_panel' }]
                 ]
             };
-            await edit(
-effect + '\n' +
-'👥 *إدارة المستخدمين*\n' +
-effect,
-                keyboard);
+            await edit('👥 *إدارة المستخدمين*', keyboard);
             return;
         }
 
         if (data === 'admin_list_users') {
             const users = get_all_users();
-            let txt = effect + '\n📋 *قائمة المستخدمين*\n\n';
+            let txt = '📋 *قائمة المستخدمين*\n\n';
             users.slice(0, 20).forEach(u => {
-                txt += '🆔 ' + u.id + ' | @' + u.username + ' | ' + u.status + ' | حد /fix: ' + u.fix_limit + 'x\n';
+                txt += 'ID: ' + u.id + ' | @' + u.username + ' | ' + u.status + ' | حد /fix: ' + u.fix_limit + 'x\n';
             });
-            if (users.length > 20) txt += '\n... و ' + (users.length - 20) + ' مستخدم آخر';
-            txt += '\n' + effect;
             await edit(txt, { inline_keyboard: [[{ text: '🔙 العودة', callback_data: 'admin_user' }]] });
             return;
         }
 
         if (data === 'admin_ban') {
-            await bot.sendMessage(chatId, '🚫 أرسل ID المستخدم للحظر');
+            await bot.sendMessage(chatId, '🚫 أرسل ID المستخدم');
             bot.once('message', async (m) => {
                 const id = parseInt(m.text);
-                if (isNaN(id)) return bot.sendMessage(chatId, '❌ يجب إرسال رقم');
+                if (isNaN(id)) return bot.sendMessage(chatId, '❌ رقم غير صحيح');
                 if (isOwner(id)) return bot.sendMessage(chatId, '❌ لا يمكن حظر المالك');
                 const user = get_user(id);
                 user.is_banned = 1;
                 save_user(user);
-                const effect2 = getEffect();
-                bot.sendMessage(chatId, effect2 + '\n✅ تم حظر المستخدم **' + id + '**\n' + effect2);
+                bot.sendMessage(chatId, '✅ تم حظر **' + id + '**');
             });
             return;
         }
 
         if (data === 'admin_unban') {
-            await bot.sendMessage(chatId, '🟢 أرسل ID المستخدم لإلغاء الحظر');
+            await bot.sendMessage(chatId, '🟢 أرسل ID المستخدم');
             bot.once('message', async (m) => {
                 const id = parseInt(m.text);
-                if (isNaN(id)) return bot.sendMessage(chatId, '❌ يجب إرسال رقم');
+                if (isNaN(id)) return bot.sendMessage(chatId, '❌ رقم غير صحيح');
                 const user = get_user(id);
                 user.is_banned = 0;
                 save_user(user);
-                const effect2 = getEffect();
-                bot.sendMessage(chatId, effect2 + '\n✅ تم إلغاء حظر المستخدم **' + id + '**\n' + effect2);
+                bot.sendMessage(chatId, '✅ تم إلغاء حظر **' + id + '**');
             });
             return;
         }
@@ -786,24 +602,20 @@ effect,
             const users = get_all_users();
             const total = users.length;
             const banned = users.filter(u => u.is_banned).length;
-            const owners = users.filter(u => u.status === 'owner').length;
             const mtCount = get_mt_texts().length;
             const emailCount = readDB('emails.json').length;
-            const historyCount = readDB(CONFIG.HISTORY_DB).length;
 
             const txt = 
 effect + '\n' +
 '📊 *إحصائيات البوت*\n\n' +
-'👥 إجمالي المستخدمين: *' + total + '*\n' +
-'👑 المالكين: *' + owners + '*\n' +
+'👥 المستخدمين: *' + total + '*\n' +
 '🚫 المحظورين: *' + banned + '*\n' +
-'📝 قوالب MT: *' + mtCount + '*\n' +
+'📝 القوالب: *' + mtCount + '*\n' +
 '📧 البريدات: *' + emailCount + '*\n' +
-'📜 عدد الطلبات: *' + historyCount + '*\n' +
-'⏱️ فترة التهدئة: *' + (cooldown_duration/60000) + ' دقيقة*\n' +
+'⏱️ التهدئة: *' + (cooldown_duration/60000) + ' دقيقة*\n' +
 effect;
 
-            await edit(txt, { inline_keyboard: [[{ text: '🔙 العودة للوحة', callback_data: 'admin_panel' }]] });
+            await edit(txt, { inline_keyboard: [[{ text: '🔙 العودة', callback_data: 'admin_panel' }]] });
             return;
         }
 
@@ -821,11 +633,9 @@ effect;
 // 🚀 التشغيل
 // ============================================================
 
-console.log('🛡️ محارب الابتزاز - يعمل على Render...');
-console.log('═══════════════════════════════════════════════');
-console.log('🎨 3 تأثيرات فقط: شريط، تدرج، نجوم');
-console.log('👤 المطور: @A_b_d_Tb');
-console.log('📞 الدعم: @A_b_d_Tb - @A_b_d_Tb');
-console.log('═══════════════════════════════════════════════');
+console.log('🛡️ محارب الابتزاز - يعمل...');
+console.log('👤 المطور: @' + CONFIG.DEVELOPER_USERNAME);
+console.log('📞 الدعم: @' + CONFIG.SUPPORT_USERNAME);
 
-setInterval(autoCheck, 30000);
+// تعطيل الفحص التلقائي مؤقتاً
+// setInterval(autoCheck, 30000);
