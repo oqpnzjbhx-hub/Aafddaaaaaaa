@@ -29,12 +29,14 @@ const CONFIG = {
     SETTINGS_DB: 'settings.json'
 };
 
-const bot = new TelegramBot(CONFIG.TELEGRAM_TOKEN, { polling: true });
+// إنشاء البوت (بدون deleteWebhook)
+const bot = new TelegramBot(CONFIG.TELEGRAM_TOKEN, { 
+    polling: true,
+    // منع التعارض
+    onlyFirstMatch: true
+});
 
-// حذف Webhook تلقائي
-bot.deleteWebhook().then(() => {
-    console.log('✅ Webhook deleted');
-}).catch(() => {});
+console.log('🛡️ محارب الابتزاز - يعمل...');
 
 // ============================================================
 // 🎨 تأثيرات الشفافية (3 فقط)
@@ -410,7 +412,7 @@ effect);
 });
 
 // ============================================================
-// 🎯 معالج الأزرار
+// 🎯 معالج الأزرار (Callback)
 // ============================================================
 
 bot.on('callback_query', async (call) => {
