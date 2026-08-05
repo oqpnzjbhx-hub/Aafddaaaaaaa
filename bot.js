@@ -1,5 +1,5 @@
 // ============================================================
-// 🤖 بوت تيليجرام - النسخة المتكاملة (ملف واحد)
+// 🤖 بوت تيليجرام - النسخة النهائية الصحيحة
 // ============================================================
 // 👤 المطور: @zs_dm
 // 📞 تواصل: @AFR_0 - @LPB_B
@@ -10,7 +10,6 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const Imap = require('node-imap');
 const { simpleParser } = require('mailparser');
-const path = require('path');
 
 // ============================================================
 // ⚙️ الإعدادات (مدمجة)
@@ -19,7 +18,6 @@ const path = require('path');
 const CONFIG = {
     TELEGRAM_TOKEN: '8407230820:AAG87DEFdVKHv6CkNgWjWwgnSvUewq-6MXo',
     OWNER_ID: 8659926441,
-    CHANNEL_ID: '@A_b_d_Tb',
     PROFILE_PHOTO_URL: 'https://files.catbox.moe/gsyfb0.jpg',
     EMAIL_SENDER: 'shrhhubsibsisb123@gmail.com',
     EMAIL_PASSWORD: '84kqjiqd7',
@@ -28,7 +26,6 @@ const CONFIG = {
     PREMIUM_FILE: 'premium_users.json',
     USER_DB: 'users.json',
     HISTORY_DB: 'history.json',
-    BANNED_GROUP_DB: 'banned_groups.json',
     SETTINGS_DB: 'settings.json'
 };
 
@@ -38,168 +35,125 @@ const bot = new TelegramBot(CONFIG.TELEGRAM_TOKEN, { polling: true });
 // 📁 دوال قاعدة البيانات
 // ============================================================
 
-const init_db_file = (filePath, defaultData) => {
-    if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, JSON.stringify(defaultData, null, 4), 'utf8');
+const init_db = (file, defaultData) => {
+    if (!fs.existsSync(file)) {
+        fs.writeFileSync(file, JSON.stringify(defaultData, null, 4));
     }
 };
 
-init_db_file(CONFIG.MT_FILE, []);
-init_db_file(CONFIG.PREMIUM_FILE, []);
-init_db_file(CONFIG.USER_DB, {});
-init_db_file(CONFIG.HISTORY_DB, []);
-init_db_file(CONFIG.BANNED_GROUP_DB, []);
-init_db_file('groups.json', {});
-init_db_file('owners.json', [CONFIG.OWNER_ID]);
-init_db_file('emails.json', []);
-init_db_file(CONFIG.SETTINGS_DB, {
+init_db(CONFIG.MT_FILE, []);
+init_db(CONFIG.PREMIUM_FILE, []);
+init_db(CONFIG.USER_DB, {});
+init_db(CONFIG.HISTORY_DB, []);
+init_db('owners.json', [CONFIG.OWNER_ID]);
+init_db('emails.json', []);
+init_db(CONFIG.SETTINGS_DB, {
     cooldown_duration: 60000,
-    global_cooldown: 0,
     active_mt_id: 0,
     active_email_id: 0
 });
 
-let settings_cache = JSON.parse(fs.readFileSync(CONFIG.SETTINGS_DB, 'utf8'));
-let cooldown_duration = settings_cache.cooldown_duration;
-let active_mt_id = settings_cache.active_mt_id;
-let active_email_id = settings_cache.active_email_id;
+const readDB = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+const writeDB = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 4), 'utf8');
 
-const read_db = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
-const write_db = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 4), 'utf8');
+let settings = readDB(CONFIG.SETTINGS_DB);
+let cooldown_duration = settings.cooldown_duration;
+let active_mt_id = settings.active_mt_id;
+let active_email_id = settings.active_email_id;
 
-const get_mt_texts = () => read_db(CONFIG.MT_FILE);
-const get_mt_text_by_id = (id) => get_mt_texts().find(mt => mt.id === id);
+const get_mt_texts = () => readDB(CONFIG.MT_FILE);
+const get_mt_by_id = (id) => get_mt_texts().find(mt => mt.id === id);
 
-const update_settings = (key, value) => {
-    settings_cache[key] = value;
-    write_db(CONFIG.SETTINGS_DB, settings_cache);
+const updateSettings = (key, value) => {
+    settings[key] = value;
+    writeDB(CONFIG.SETTINGS_DB, settings);
     if (key === 'cooldown_duration') cooldown_duration = value;
     if (key === 'active_mt_id') active_mt_id = value;
     if (key === 'active_email_id') active_email_id = value;
 };
 
-const get_owners = () => read_db('owners.json');
-const is_owner = (userId) => get_owners().includes(userId);
-
-const is_bot_admin = async (chatId) => {
-    if (chatId < 0) {
-        try {
-            const admins = await bot.getChatAdministrators(chatId);
-            const botInfo = await bot.getMe();
-            const botMember = admins.find(admin => admin.user.id === botInfo.id);
-            return botMember && ['administrator', 'creator'].includes(botMember.status);
-        } catch (e) {
-            console.error('Gagal cek status bot di grup:', e.message);
-            try {
-                const botMember = await bot.getChatMember(chatId, bot.options.id);
-                return ['administrator', 'creator'].includes(botMember.status);
-            } catch (e2) {
-                console.error('Gagal cek status bot di grup (fallback):', e2.message);
-                return false;
-            }
-        }
-    }
-    return true;
+const isOwner = (userId) => {
+    const owners = readDB('owners.json');
+    return owners.includes(userId);
 };
 
-const get_group_cooldown = (chatId) => {
-    const groups = read_db('groups.json');
-    return groups[chatId] ? groups[chatId].cooldown : 60000;
-};
-
-const update_group_cooldown = (chatId, newCooldown) => {
-    const groups = read_db('groups.json');
-    groups[chatId] = { ...groups[chatId], cooldown: newCooldown };
-    write_db('groups.json', groups);
-};
-
-const is_group_registered = (chatId) => {
-    const groups = read_db('groups.json');
-    return !!groups[chatId];
-};
-
-const get_active_email_creds = () => {
-    const emails = read_db('emails.json');
+const get_active_email = () => {
+    const emails = readDB('emails.json');
     if (active_email_id === 0) {
         return { user: CONFIG.EMAIL_SENDER, pass: CONFIG.EMAIL_PASSWORD };
     }
-    const active_email = emails.find(e => e.id === active_email_id);
-    if (!active_email) {
-        update_settings('active_email_id', 0);
+    const active = emails.find(e => e.id === active_email_id);
+    if (!active) {
+        updateSettings('active_email_id', 0);
         return { user: CONFIG.EMAIL_SENDER, pass: CONFIG.EMAIL_PASSWORD };
     }
-    return { user: active_email.email, pass: active_email.app_pass };
+    return { user: active.email, pass: active.app_pass };
 };
-
-const setup_transporter = () => {
-    const creds = get_active_email_creds();
-    return nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
-        requireTLS: true,
-        auth: {
-            user: creds.user,
-            pass: creds.pass
-        },
-        timeout: 30000,
-        connectionTimeout: 30000,
-        socketTimeout: 30000,
-        tls: {
-            rejectUnauthorized: false
-        }
-    });
-};
-
-const notify_owner = (message) => {
-    get_owners().forEach(ownerId => {
-        bot.sendMessage(ownerId, message, { parse_mode: 'Markdown' }).catch(e => console.error('Gagal kirim notif ke owner:', e.message));
-    });
-};
-
-const get_premium_users = () => read_db(CONFIG.PREMIUM_FILE);
-const update_premium_users = (newUsers) => write_db(CONFIG.PREMIUM_FILE, newUsers);
-const is_premium = (userId) => get_premium_users().includes(userId);
 
 const get_user = (userId) => {
-    const users = read_db(CONFIG.USER_DB);
+    const users = readDB(CONFIG.USER_DB);
     const defaultUser = {
         id: userId,
         username: 'N/A',
-        status: is_owner(userId) ? 'owner' : (is_premium(userId) ? 'premium' : 'free'),
+        status: isOwner(userId) ? 'owner' : 'free',
         is_banned: 0,
         last_fix: 0,
         fix_limit: 10,
-        referral_points: 0,
-        referred_by: null,
-        referred_users: []
+        referral_points: 0
     };
     return users[userId] ? { ...defaultUser, ...users[userId] } : defaultUser;
 };
 
 const save_user = (user) => {
-    const users = read_db(CONFIG.USER_DB);
+    const users = readDB(CONFIG.USER_DB);
     users[user.id] = user;
-    write_db(CONFIG.USER_DB, users);
+    writeDB(CONFIG.USER_DB, users);
 };
 
 const get_all_users = () => {
-    const all = read_db(CONFIG.USER_DB);
+    const all = readDB(CONFIG.USER_DB);
     return Object.values(all).map(u => get_user(u.id));
 };
 
 const save_history = (data) => {
-    const history = read_db(CONFIG.HISTORY_DB);
+    const history = readDB(CONFIG.HISTORY_DB);
     const newId = history.length > 0 ? history[history.length - 1].id + 1 : 1;
     history.push({ id: newId, ...data, timestamp: new Date().toISOString() });
-    write_db(CONFIG.HISTORY_DB, history);
+    writeDB(CONFIG.HISTORY_DB, history);
 };
 
-let last_checked_date = new Date(Date.now() - 3600000);
+const notify_owner = (msg) => {
+    readDB('owners.json').forEach(ownerId => {
+        bot.sendMessage(ownerId, msg, { parse_mode: 'Markdown' }).catch(() => {});
+    });
+};
 
-const check_email_status = (to_email) => {
+// ============================================================
+// 📧 إعداد البريد
+// ============================================================
+
+const getTransporter = () => {
+    const creds = get_active_email();
+    return nodemailer.createTransport({
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        requireTLS: true,
+        auth: { user: creds.user, pass: creds.pass },
+        timeout: 30000,
+        tls: { rejectUnauthorized: false }
+    });
+};
+
+// ============================================================
+// 📧 فحص البريد الوارد
+// ============================================================
+
+let lastChecked = new Date(Date.now() - 3600000);
+
+const checkEmail = (fromEmail) => {
     return new Promise((resolve, reject) => {
-        const creds = get_active_email_creds();
+        const creds = get_active_email();
         const imap = new Imap({
             user: creds.user,
             password: creds.pass,
@@ -207,252 +161,150 @@ const check_email_status = (to_email) => {
             port: 993,
             tls: true,
             connTimeout: 30000,
-            authTimeout: 30000,
             tlsOptions: { rejectUnauthorized: false }
         });
 
-        const latest_email = { subject: null, body: null, date: null };
+        const result = { subject: null, body: null, date: null };
 
         imap.once('ready', () => {
-            imap.openBox('INBOX', false, (err, box) => {
+            imap.openBox('INBOX', false, (err) => {
                 if (err) {
                     imap.end();
-                    return reject(new Error('Gagal membuka inbox. ' + err.message));
+                    return reject(new Error('Gagal membuka inbox: ' + err.message));
                 }
 
                 const since = new Date();
                 since.setDate(since.getDate() - 1);
-                const searchCriteria = [['FROM', to_email], ['SINCE', since.toDateString()]];
-
-                imap.search(searchCriteria, (err, results) => {
-                    if (err) {
-                        imap.end();
-                        return reject(new Error('Gagal mencari email. ' + err.message));
-                    }
-                    if (!results || results.length === 0) {
+                imap.search([['FROM', fromEmail], ['SINCE', since.toDateString()]], (err, results) => {
+                    if (err || !results || results.length === 0) {
                         imap.end();
                         return resolve(null);
                     }
 
-                    const latestUid = results[results.length - 1];
-                    const f = imap.fetch(latestUid, { bodies: '', struct: true, envelope: true });
+                    const latest = results[results.length - 1];
+                    const f = imap.fetch(latest, { bodies: '', struct: true, envelope: true });
 
-                    f.on('message', (msg, seqno) => {
-                        msg.on('body', (stream, info) => {
+                    f.on('message', (msg) => {
+                        msg.on('body', (stream) => {
                             simpleParser(stream, (err, mail) => {
-                                if (err) {
-                                    console.error('Mailparser error:', err);
-                                    return;
-                                }
-                                latest_email.subject = mail.subject;
-                                latest_email.body = mail.text || mail.html;
-                                latest_email.date = mail.date;
+                                if (err) return;
+                                result.subject = mail.subject;
+                                result.body = mail.text || mail.html;
+                                result.date = mail.date;
                             });
                         });
                     });
 
-                    f.once('error', (err) => {
-                        imap.end();
-                        reject(new Error('Gagal mengambil pesan. ' + err.message));
-                    });
-
                     f.once('end', () => {
                         imap.end();
-                        resolve(latest_email);
+                        resolve(result);
+                    });
+
+                    f.once('error', (err) => {
+                        imap.end();
+                        reject(new Error('Gagal mengambil pesan: ' + err.message));
                     });
                 });
             });
         });
 
         imap.once('error', (err) => {
-            reject(new Error('IMAP Connection Error: ' + err.message + '. Pastikan App Password benar dan Port 993 terbuka. Email Aktif: ' + creds.user));
+            reject(new Error('IMAP Error: ' + err.message));
         });
-
-        imap.once('end', () => {});
 
         imap.connect();
     });
 };
 
 // ============================================================
-// 🔍 فحص تلقائي للردود
+// 🔍 فحص تلقائي
 // ============================================================
 
-const check_and_notify_users = async () => {
-    const support_email = 'support@support.whatsapp.com';
-    const email_creds = get_active_email_creds();
-    console.log('[INSTANT CHECKER] Memulai pengecekan email dari ' + support_email + ' di akun ' + email_creds.user + '...');
-
+const autoCheck = async () => {
+    const fromEmail = 'support@support.whatsapp.com';
     try {
-        const email_data = await check_email_status(support_email);
+        const email = await checkEmail(fromEmail);
+        if (!email || !email.subject || new Date(email.date) <= lastChecked) return;
 
-        if (!email_data || !email_data.subject || new Date(email_data.date) <= last_checked_date) {
-            console.log('[INSTANT CHECKER] Tidak ada balasan baru atau balasan sudah diproses.');
-            return;
-        }
+        const body = email.body || '';
+        const match = body.match(/\+?\d{5,15}/);
+        const number = match ? match[0].replace('+', '') : null;
+        if (!number) return;
 
-        const email_body = email_data.body || '';
-        const email_subject = email_data.subject || '';
-        const detected_number_match = email_body.match(/+\d{5,15}/);
-        const detected_number = detected_number_match ? detected_number_match[0].replace('+', '') : null;
+        const history = readDB(CONFIG.HISTORY_DB);
+        const entry = history.filter(h => h.number_fixed === number).pop();
+        if (!entry) return;
 
-        if (!detected_number) {
-            console.log('[INSTANT CHECKER] Balasan terbaru ditemukan, tapi tidak ada nomor WhatsApp yang terdeteksi.');
-            return;
-        }
+        const msg = 
+'📣 **BALASAN DITEMUKAN!**\n\n' +
+'Nomor: **+' + number + '**\n\n' +
+'**Subjek:** ' + email.subject + '\n' +
+'**Tanggal:** ' + new Date(email.date).toLocaleString('id-ID') + '\n\n' +
+'```\n' + body.substring(0, 500) + '...\n```';
 
-        const history = read_db(CONFIG.HISTORY_DB);
-        const matching_history = history
-            .filter(h => h.number_fixed && h.number_fixed === detected_number)
-            .pop();
-
-        if (matching_history) {
-            const user_id = matching_history.user_id;
-
-            const response_text = 
-'📣 **NOTIFIKASI BALASAN WHATSAPP DITEMUKAN!**\n\n' +
-'Nomor yang Anda bandingan: **+' + detected_number + '**\n' +
-'Email yang digunakan: `' + (matching_history.email_used || email_creds.user) + '`\n\n' +
-'**Ringkasan Balasan:**\n' +
-'Subjek: `' + email_subject + '`\n' +
-'Tanggal: ' + new Date(email_data.date).toLocaleString('id-ID') + '\n\n' +
-'---\n' +
-'**Isi Pesan:**\n' +
-'```\n' +
-email_body.substring(0, 500) + '...\n' +
-'```';
-
-            await bot.sendMessage(user_id, response_text, { parse_mode: 'Markdown' });
-            console.log('[INSTANT CHECKER] Notifikasi berhasil dikirim ke User ID ' + user_id + ' untuk nomor +' + detected_number + '.');
-
-            last_checked_date = new Date(email_data.date);
-        } else {
-            console.log('[INSTANT CHECKER] Balasan untuk nomor +' + detected_number + ' ditemukan, tapi tidak ada riwayat /fix yang cocok.');
-            notify_owner('⚠️ Balasan untuk +' + detected_number + ' DITEMUKAN di email **' + email_creds.user + '**, tapi tidak ada riwayat /fix yang cocok di DB.');
-        }
+        await bot.sendMessage(entry.user_id, msg, { parse_mode: 'Markdown' });
+        lastChecked = new Date(email.date);
+        console.log('✅ Notifikasi terkirim untuk +' + number);
     } catch (e) {
-        console.error('[INSTANT CHECKER ERROR - ' + email_creds.user + ']', e.message);
-        if (e.message.includes('IMAP Connection Error')) {
-            notify_owner('❌ **INSTANT CHECKER GAGAL TOTAL di ' + email_creds.user + ':** ' + e.message);
-        }
+        console.error('AutoCheck error:', e.message);
     }
 };
 
 // ============================================================
-// 📝 معالج /start
+// 📝 أمر /start
 // ============================================================
 
-const handleStart = async (msg, chatId, messageId) => {
+bot.onText(/\/start/, async (msg) => {
     const userId = msg.from.id;
     const username = msg.from.username || msg.from.first_name;
     let user = get_user(userId);
 
-    if (chatId === userId && !user.status) {
-        const parts = msg.text.split(' ');
-        if (parts.length > 1 && parts[0] === '/start') {
-            const referredBy = parseInt(parts[1]);
-            const referrer = get_user(referredBy);
-
-            if (referrer && referrer.id !== userId && !referrer.referred_users.includes(userId)) {
+    if (msg.text && msg.text.includes(' ')) {
+        const ref = parseInt(msg.text.split(' ')[1]);
+        if (ref && ref !== userId) {
+            const referrer = get_user(ref);
+            if (!referrer.referred_users || !referrer.referred_users.includes(userId)) {
+                referrer.referral_points = (referrer.referral_points || 0) + 1;
+                if (!referrer.referred_users) referrer.referred_users = [];
                 referrer.referred_users.push(userId);
-                referrer.referral_points += 1;
                 save_user(referrer);
-
-                user.referred_by = referredBy;
-
-                bot.sendMessage(referrer.id, '🎉 **Selamat!** User @' + username + ' baru saja bergabung melalui link referral Anda. Anda mendapatkan **1 Poin!**\n\nTotal Poin: ' + referrer.referral_points, { parse_mode: 'Markdown' });
-
-                notify_owner('🌟 **REFERRAL BARU:** User @' + username + ' dirujuk oleh Owner/User ID ' + referredBy + '.');
+                user.referred_by = ref;
+                bot.sendMessage(ref, '🎉 Referral baru! +1 Poin. Total: ' + referrer.referral_points);
             }
         }
     }
 
     user.username = username;
-    user.status = is_owner(userId) ? 'owner' : (is_premium(userId) ? 'premium' : 'free');
+    user.status = isOwner(userId) ? 'owner' : 'free';
     save_user(user);
 
     const botInfo = await bot.getMe();
-    const referralLink = 'https://t.me/' + botInfo.username + '?start=' + userId;
-
-    const caption = 
-'👋 Halo ' + username + '!\n\n' +
-'👤 **Tentang User**\n' +
-'Username: @' + username + '\n' +
-'ID: `' + userId + '`\n' +
-'Status: **' + user.status.toUpperCase() + '**\n' +
-'Limit /fix Anda: **' + user.fix_limit + 'x**\n' +
-'Poin Referral: **' + user.referral_points + '**\n\n' +
-'➡️ Link Referral Anda: `' + referralLink + '`\n\n' +
-'ℹ️ **Menu Bot**\n' +
-'Silakan pilih menu di bawah ini.';
+    const link = 'https://t.me/' + botInfo.username + '?start=' + userId;
 
     const keyboard = {
         inline_keyboard: [
-            [{ text: '👑 Semua Support', callback_data: 'support' }],
-            [{ text: '📝 Tutorial', callback_data: 'tutorial' }],
-            [{ text: '✅ Fix Merah', callback_data: 'fix_merah_menu' }]
+            [{ text: '✅ Fix Merah', callback_data: 'fix_menu' }],
+            [{ text: '📝 Tutorial', callback_data: 'tutorial' }]
         ]
     };
 
-    if (is_owner(userId)) {
-        keyboard.inline_keyboard.push([{ text: '⚙️ Owner Menu', callback_data: 'owner_menu' }]);
+    if (isOwner(userId)) {
+        keyboard.inline_keyboard.push([{ text: '⚙️ Admin Panel', callback_data: 'admin_panel' }]);
     }
 
-    const editMenuCaption = async (text, markup) => {
-        const params = {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'Markdown',
-            reply_markup: markup
-        };
+    const caption = 
+'👋 Halo ' + username + '!\n\n' +
+'ID: `' + userId + '`\n' +
+'Status: **' + user.status.toUpperCase() + '**\n' +
+'Limit: **' + user.fix_limit + 'x**\n' +
+'Poin: **' + user.referral_points + '**\n\n' +
+'🔗 Link Referral: `' + link + '`';
 
-        try {
-            await bot.editMessageCaption(text, params);
-        } catch (e) {
-            if (e.message.includes('message caption is empty') || e.message.includes('there is no text in the message to edit')) {
-                try {
-                    await bot.editMessageText(text, params);
-                } catch (e2) {
-                    if (!e2.message.includes('message is not modified')) {
-                        throw e2;
-                    }
-                }
-            } else if (!e.message.includes('message is not modified')) {
-                throw e;
-            }
-        }
-    };
-
-    if (messageId) {
-        await editMenuCaption(caption, keyboard);
-    } else {
-        await bot.sendPhoto(chatId, CONFIG.PROFILE_PHOTO_URL, {
-            caption: caption,
-            parse_mode: 'Markdown',
-            reply_markup: keyboard
-        });
-    }
-};
-
-bot.onText(/\/start/, (msg) => handleStart(msg, msg.chat.id, null));
-
-// ============================================================
-// 🛡️ فلتر الرسائل
-// ============================================================
-
-bot.on('message', (msg) => {
-    const userId = msg.from.id;
-    const user = get_user(userId);
-
-    if (user.is_banned) {
-        return;
-    }
-
-    if (msg.chat.type.includes('group') && !is_group_registered(msg.chat.id)) {
-        if (!is_owner(userId)) {
-            return;
-        }
-    }
+    await bot.sendPhoto(userId, CONFIG.PROFILE_PHOTO_URL, {
+        caption: caption,
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+    });
 });
 
 // ============================================================
@@ -463,738 +315,336 @@ bot.onText(/\/fix (.+)/, async (msg, match) => {
     const userId = msg.from.id;
     const chatId = msg.chat.id;
     const username = msg.from.username || 'N/A';
-    const raw_nomor = match[1].trim();
-    const nomor = raw_nomor.replace(/[^0-9+]/g, '');
+    const raw = match[1].trim();
+    const number = raw.replace(/[^0-9+]/g, '');
     let user = get_user(userId);
 
-    if (msg.chat.type.includes('group')) {
-        const groups = read_db('groups.json');
-
-        if (!groups[chatId]) {
-            if (is_owner(userId)) {
-                bot.sendMessage(chatId, '⚠️ Grup ini belum terdaftar. Owner bisa menggunakan `/addgroup` agar fitur grup berfungsi penuh.', { reply_to_message_id: msg.message_id });
-            } else {
-                return bot.sendMessage(chatId, '❌ Grup ini belum terdaftar. Fitur /fix hanya bisa digunakan di grup yang sudah didaftarkan Owner.', { reply_to_message_id: msg.message_id });
-            }
-        } else {
-            const groupCd = groups[chatId].cooldown;
-
-            if (groups[chatId].last_fix && Date.now() < groups[chatId].last_fix + groupCd) {
-                const remaining = Math.ceil((groups[chatId].last_fix + groupCd - Date.now()) / 1000);
-                return bot.sendMessage(chatId, '⏳ Fitur /fix sedang dalam **cooldown grup**. Tunggu ' + remaining + ' detik. (Cooldown grup saat ini: ' + (groupCd/1000) + ' detik)', { reply_to_message_id: msg.message_id });
-            }
-        }
+    if (number.length < 5) {
+        return bot.sendMessage(chatId, '❌ Format salah. Contoh: /fix +62812xxxx');
     }
 
-    if (!is_owner(userId)) {
-        if (Date.now() < user.last_fix + cooldown_duration) {
-            const remaining = Math.ceil((user.last_fix + cooldown_duration - Date.now()) / 1000);
-            return bot.sendMessage(chatId, '⏳ Anda harus menunggu **cooldown individu** selama ' + remaining + ' detik sebelum menggunakan /fix lagi. (Cooldown: ' + (cooldown_duration/1000) + ' detik)', { reply_to_message_id: msg.message_id });
-        }
-
-        if (user.fix_limit <= 0) {
-            return bot.sendMessage(chatId, '❌ **Limit /fix** Anda sudah habis (' + user.fix_limit + 'x). Undang teman untuk mendapatkan Poin Referral dan tukar Poin menjadi Limit tambahan.', { reply_to_message_id: msg.message_id });
-        }
+    const mtList = get_mt_texts();
+    const activeMt = mtList.find(mt => mt.id === active_mt_id);
+    if (!activeMt) {
+        return bot.sendMessage(chatId, '❌ Tidak ada MT aktif. Admin harus mengaktifkan salah satu.');
     }
 
-    if (nomor.length < 5) {
-        return bot.sendMessage(chatId, '❌ Format nomor tidak valid. Pastikan Anda menyertakan kode negara (cth: /fix +62812xxxx).', { reply_to_message_id: msg.message_id });
+    const emailCreds = get_active_email();
+    if (!emailCreds.user || !emailCreds.pass) {
+        return bot.sendMessage(chatId, '❌ Tidak ada email aktif.');
     }
 
-    const mt_texts = get_mt_texts();
-    const active_template = mt_texts.find(mt => mt.id === active_mt_id);
-
-    if (!active_template) {
-        return bot.sendMessage(chatId, '❌ Tidak ada Teks Banding yang aktif. Owner harus mengaktifkan salah satunya dengan `/setactivemt <ID>`.', { reply_to_message_id: msg.message_id });
-    }
-
-    const email_creds = get_active_email_creds();
-    if (!email_creds.user || !email_creds.pass) {
-        return bot.sendMessage(chatId, '❌ Gagal: Tidak ada akun email aktif yang valid untuk mengirim banding. Gunakan `/setactiveemail`.', { reply_to_message_id: msg.message_id });
-    }
-
-    const body = active_template.body.replace(/{nomor}/g, nomor);
+    const body = activeMt.body.replace(/{nomor}/g, number);
 
     try {
-        const transporter = setup_transporter();
+        const transporter = getTransporter();
         await transporter.sendMail({
-            from: email_creds.user,
-            to: active_template.to_email,
-            subject: active_template.subject,
+            from: emailCreds.user,
+            to: activeMt.to_email,
+            subject: activeMt.subject,
             text: body
         });
 
-        if (!is_owner(userId)) {
+        if (!isOwner(userId)) {
             user.fix_limit -= 1;
             user.last_fix = Date.now();
         }
-
-        if (msg.chat.type.includes('group')) {
-            const groups = read_db('groups.json');
-            if (groups[chatId]) {
-                groups[chatId].last_fix = Date.now();
-                write_db('groups.json', groups);
-            }
-        }
-
         save_user(user);
 
-        bot.sendMessage(chatId, '✅ Nomor ' + nomor + ' berhasil dibandinkan dengan **MT ID ' + active_mt_id + '** menggunakan email **' + email_creds.user + '**.\n\n*Limit Anda tersisa: ' + user.fix_limit + 'x*\n*Balasan dari WhatsApp akan otomatis dicek dan dikirim ke chat Anda!*', { parse_mode: 'Markdown', reply_to_message_id: msg.message_id });
+        bot.sendMessage(chatId, '✅ Nomor ' + number + ' berhasil dikirim.\n📧 ' + emailCreds.user + '\n✅ Limit: ' + user.fix_limit + 'x');
 
         save_history({
             user_id: userId,
             username: username,
-            command: '/fix ' + nomor,
-            group_id: msg.chat.type.includes('group') ? chatId : null,
-            number_fixed: nomor.replace('+', ''),
-            email_used: email_creds.user,
-            details: 'Berhasil mengirim banding MT ID ' + active_mt_id + ' ke ' + active_template.to_email
+            command: '/fix ' + number,
+            number_fixed: number.replace('+', ''),
+            email_used: emailCreds.user
         });
 
-        notify_owner('⚙️ **Penggunaan Fitur /fix**\n\nUser: @' + username + '\nID: ' + userId + '\nNomor: ' + nomor + '\nMT Aktif: ' + active_mt_id + '\nEmail: ' + email_creds.user);
-
-        check_and_notify_users();
-
+        autoCheck();
     } catch (e) {
-        console.error('Error saat mengirim email:', e);
-        bot.sendMessage(chatId, '❌ Gagal mengirim banding untuk nomor ' + nomor + ' menggunakan email **' + email_creds.user + '**:\n' + e.message, { reply_to_message_id: msg.message_id });
-        save_history({
-            user_id: userId,
-            username: username,
-            command: '/fix ' + nomor,
-            number_fixed: nomor.replace('+', ''),
-            email_used: email_creds.user,
-            details: 'Gagal mengirim banding: ' + e.message
-        });
+        bot.sendMessage(chatId, '❌ Gagal: ' + e.message);
     }
 });
 
 // ============================================================
-// 👑 أوامر المالك (Owner)
+// 🎯 معالج الأزرار (Callback)
 // ============================================================
 
-bot.onText(/\/addown (\d+)/, (msg, match) => {
-    if (msg.from.id !== CONFIG.OWNER_ID) return;
-    const userId = parseInt(match[1]);
-    let owners = get_owners();
-
-    if (owners.includes(userId)) {
-        return bot.sendMessage(msg.chat.id, '⚠️ User ' + userId + ' sudah terdaftar sebagai Owner.');
-    }
-
-    owners.push(userId);
-    write_db('owners.json', owners);
-
-    let user = get_user(userId);
-    user.status = 'owner';
-    save_user(user);
-
-    bot.sendMessage(msg.chat.id, '✅ User ' + userId + ' berhasil ditambahkan sebagai **Owner Kedua**.', { parse_mode: 'Markdown' });
-    bot.sendMessage(userId, '👑 Anda telah diangkat menjadi **Owner** bot ini!', { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/delown (\d+)/, (msg, match) => {
-    if (msg.from.id !== CONFIG.OWNER_ID) return;
-    const userId = parseInt(match[1]);
-
-    if (userId === CONFIG.OWNER_ID) {
-        return bot.sendMessage(msg.chat.id, '❌ Owner utama tidak bisa dihapus.');
-    }
-
-    let owners = get_owners();
-    const initial_length = owners.length;
-    owners = owners.filter(id => id !== userId);
-
-    if (owners.length === initial_length) {
-        return bot.sendMessage(msg.chat.id, '❌ User ' + userId + ' bukan Owner.');
-    }
-
-    write_db('owners.json', owners);
-
-    let user = get_user(userId);
-    user.status = 'free';
-    save_user(user);
-
-    bot.sendMessage(msg.chat.id, '✅ User ' + userId + ' berhasil dihapus dari daftar Owner.');
-    bot.sendMessage(userId, '⚠️ Akses Owner Anda telah dicabut.', { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/addgroup/, async (msg) => {
-    if (!is_owner(msg.from.id)) return;
-    if (!msg.chat.type.includes('group')) {
-        return bot.sendMessage(msg.chat.id, '❌ Perintah ini harus dijalankan di dalam Grup.');
-    }
-
-    const chatId = msg.chat.id;
-    const chatTitle = msg.chat.title;
-
-    if (!(await is_bot_admin(chatId))) {
-        return bot.sendMessage(chatId, '❌ Bot harus menjadi **Administrator** di grup ini untuk didaftarkan.', { reply_to_message_id: msg.message_id });
-    }
-
-    let groups = read_db('groups.json');
-    if (groups[chatId]) {
-        return bot.sendMessage(chatId, '⚠️ Grup **' + chatTitle + '** sudah terdaftar. (Cooldown saat ini: ' + (groups[chatId].cooldown/1000) + ' detik)', { parse_mode: 'Markdown', reply_to_message_id: msg.message_id });
-    }
-
-    groups[chatId] = {
-        title: chatTitle,
-        cooldown: 60000,
-        last_fix: 0
-    };
-    write_db('groups.json', groups);
-
-    bot.sendMessage(chatId, '✅ Grup **' + chatTitle + '** berhasil didaftarkan! Cooldown grup default: 1 menit.\n\nOwner dapat mengubahnya dengan `/setgroupcd <menit>`.', { parse_mode: 'Markdown', reply_to_message_id: msg.message_id });
-});
-
-bot.onText(/\/delgroup/, (msg) => {
-    if (!is_owner(msg.from.id)) return;
-    if (!msg.chat.type.includes('group')) {
-        return bot.sendMessage(msg.chat.id, '❌ Perintah ini harus dijalankan di dalam Grup.');
-    }
-
-    const chatId = msg.chat.id;
-    let groups = read_db('groups.json');
-
-    if (!groups[chatId]) {
-        return bot.sendMessage(chatId, '⚠️ Grup ini belum terdaftar.', { reply_to_message_id: msg.message_id });
-    }
-
-    const chatTitle = groups[chatId].title;
-    delete groups[chatId];
-    write_db('groups.json', groups);
-
-    bot.sendMessage(chatId, '✅ Grup **' + chatTitle + '** berhasil dihapus dari daftar bot.', { parse_mode: 'Markdown', reply_to_message_id: msg.message_id });
-});
-
-bot.onText(/\/setgroupcd (\d+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    if (!msg.chat.type.includes('group')) {
-        return bot.sendMessage(msg.chat.id, '❌ Perintah ini harus dijalankan di dalam Grup.');
-    }
-
-    const chatId = msg.chat.id;
-    const minutes = parseInt(match[1]);
-
-    if (!is_group_registered(chatId)) {
-        return bot.sendMessage(chatId, '❌ Grup ini belum terdaftar. Gunakan `/addgroup` terlebih dahulu.', { reply_to_message_id: msg.message_id });
-    }
-    if (isNaN(minutes) || minutes < 1) {
-        return bot.sendMessage(chatId, '⚠️ Masukkan angka menit yang valid.');
-    }
-
-    const new_cooldown = minutes * 60 * 1000;
-    update_group_cooldown(chatId, new_cooldown);
-    bot.sendMessage(chatId, '✅ Cooldown grup **' + msg.chat.title + '** berhasil diatur menjadi **' + minutes + ' menit** (' + (minutes * 60) + ' detik).', { parse_mode: 'Markdown', reply_to_message_id: msg.message_id });
-});
-
-bot.onText(/\/listgroups/, (msg) => {
-    if (!is_owner(msg.from.id)) return;
-    const groups = read_db('groups.json');
-    const groupList = Object.entries(groups).map(([id, data]) =>
-        '**ID:** `' + id + '`\n**Nama:** ' + data.title + '\n**CD:** ' + (data.cooldown/60000) + ' menit'
-    ).join('\n\n');
-
-    bot.sendMessage(msg.chat.id, '👥 **Daftar Grup Terdaftar (' + Object.keys(groups).length + ')**\n\n' + (groupList || 'Tidak ada grup terdaftar.'), { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/setcd (\d+)/, async (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const minutes = parseInt(match[1]);
-    if (isNaN(minutes) || minutes < 1) {
-        return bot.sendMessage(msg.chat.id, '⚠️ Masukkan angka menit yang valid.');
-    }
-    const new_cooldown = minutes * 60 * 1000;
-    update_settings('cooldown_duration', new_cooldown);
-    bot.sendMessage(msg.chat.id, '✅ Cooldown **individu user** berhasil diatur menjadi **' + minutes + ' menit**.');
-});
-
-bot.onText(/\/getlimitpoin (\d+)/, async (msg, match) => {
-    if (msg.chat.id !== msg.from.id) {
-        return bot.sendMessage(msg.chat.id, '❌ Perintah ini hanya bisa dijalankan di Private Chat bot.', { reply_to_message_id: msg.message_id });
-    }
-
-    const userId = msg.from.id;
-    const poinToUse = parseInt(match[1]);
-    let user = get_user(userId);
-
-    if (isNaN(poinToUse) || poinToUse < 3) {
-        return bot.sendMessage(msg.chat.id, '❌ Jumlah poin yang ditukar harus minimal **3 poin**.');
-    }
-
-    if (user.referral_points < poinToUse) {
-        return bot.sendMessage(msg.chat.id, '❌ Poin Anda tidak mencukupi. Poin Anda saat ini: **' + user.referral_points + '**.');
-    }
-
-    const limitGained = Math.floor(poinToUse / 3);
-    const pointsUsed = limitGained * 3;
-
-    user.referral_points -= pointsUsed;
-    user.fix_limit += limitGained;
-    save_user(user);
-
-    bot.sendMessage(msg.chat.id, '✅ Penukaran berhasil! Anda menukar **' + pointsUsed + ' poin** untuk mendapatkan **' + limitGained + ' Limit /fix** tambahan.\n\nLimit Anda saat ini: **' + user.fix_limit + 'x**\nPoin tersisa: **' + user.referral_points + '**');
-});
-
-bot.onText(/\/addemail (.+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const parts = match[1].split(' ');
-    if (parts.length < 2) {
-        return bot.sendMessage(msg.chat.id, '❌ Format salah. Gunakan: `/addemail <email> <app_password>`');
-    }
-
-    const email = parts[0];
-    const app_pass = parts.slice(1).join(' ');
-
-    let emails = read_db('emails.json');
-    const newId = emails.length > 0 ? emails[emails.length - 1].id + 1 : 1;
-
-    if (emails.find(e => e.email === email)) {
-        return bot.sendMessage(msg.chat.id, '⚠️ Email ' + email + ' sudah terdaftar.');
-    }
-
-    emails.push({ id: newId, email: email, app_pass: app_pass });
-    write_db('emails.json', emails);
-    bot.sendMessage(msg.chat.id, '✅ Email ' + email + ' berhasil didaftarkan dengan ID **' + newId + '**. Gunakan `/setactiveemail ' + newId + '` untuk menggunakannya.');
-});
-
-bot.onText(/\/listemails/, (msg) => {
-    if (!is_owner(msg.from.id)) return;
-    const emails = read_db('emails.json');
-    const active_id = active_email_id;
-
-    let list = '📧 **Daftar Email Terdaftar:**\n\n';
-    list += '**ID 0 (Default Config):** ' + CONFIG.EMAIL_SENDER + (active_id === 0 ? ' [AKTIF]' : '') + '\n---\n';
-
-    emails.forEach(e => {
-        list += '**ID ' + e.id + ':** ' + e.email + (e.id === active_id ? ' [AKTIF]' : '') + '\n';
-    });
-
-    bot.sendMessage(msg.chat.id, list, { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/setactiveemail (\d+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const id = parseInt(match[1]);
-
-    if (id === 0) {
-        update_settings('active_email_id', 0);
-        return bot.sendMessage(msg.chat.id, '✅ Email aktif berhasil disetel ke **ID 0 (Default Config)**: ' + CONFIG.EMAIL_SENDER + '.');
-    }
-
-    const emails = read_db('emails.json');
-    const email = emails.find(e => e.id === id);
-
-    if (!email) {
-        return bot.sendMessage(msg.chat.id, '❌ ID ' + id + ' tidak ditemukan.');
-    }
-
-    update_settings('active_email_id', id);
-    bot.sendMessage(msg.chat.id, '✅ Email aktif berhasil disetel ke **ID ' + id + '**: ' + email.email + '.');
-});
-
-bot.onText(/\/addpremium (\d+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const userId = parseInt(match[1]);
-    let premiumUsers = get_premium_users();
-
-    if (premiumUsers.includes(userId)) {
-        return bot.sendMessage(msg.chat.id, '⚠️ User ' + userId + ' sudah Premium.');
-    }
-
-    premiumUsers.push(userId);
-    update_premium_users(premiumUsers);
-
-    let user = get_user(userId);
-    user.status = 'premium';
-    save_user(user);
-
-    bot.sendMessage(msg.chat.id, '✅ User ' + userId + ' berhasil diangkat menjadi **Premium**.');
-    bot.sendMessage(userId, '👑 Status akun Anda telah ditingkatkan menjadi **Premium**!', { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/delprem (\d+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const userId = parseInt(match[1]);
-    let premiumUsers = get_premium_users();
-    const initial_length = premiumUsers.length;
-    premiumUsers = premiumUsers.filter(id => id !== userId);
-
-    if (premiumUsers.length === initial_length) {
-        return bot.sendMessage(msg.chat.id, '❌ User ' + userId + ' bukan Premium.');
-    }
-
-    update_premium_users(premiumUsers);
-
-    let user = get_user(userId);
-    user.status = is_owner(userId) ? 'owner' : 'free';
-    save_user(user);
-
-    bot.sendMessage(msg.chat.id, '✅ User ' + userId + ' dihapus dari daftar Premium.');
-    bot.sendMessage(userId, '⚠️ Status Premium Anda telah dicabut.', { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/ban (\d+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const userId = parseInt(match[1]);
-
-    let user = get_user(userId);
-    if (is_owner(userId)) {
-        return bot.sendMessage(msg.chat.id, '❌ Tidak bisa ban Owner.');
-    }
-
-    user.is_banned = 1;
-    save_user(user);
-
-    bot.sendMessage(msg.chat.id, '✅ User ' + userId + ' berhasil diban.');
-    bot.sendMessage(userId, '🚫 Akun Anda telah diblokir dan tidak dapat menggunakan bot ini.', { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/unban (\d+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const userId = parseInt(match[1]);
-
-    let user = get_user(userId);
-    user.is_banned = 0;
-    save_user(user);
-
-    bot.sendMessage(msg.chat.id, '✅ User ' + userId + ' berhasil diunban.');
-    bot.sendMessage(userId, '✅ Akun Anda telah diaktifkan kembali dan dapat menggunakan bot ini.', { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/owner_broadcast (.+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const message = match[1];
-    const users = get_all_users().filter(u => !u.is_banned);
-    let successCount = 0;
-
-    users.forEach(user => {
-        bot.sendMessage(user.id, '📢 **Pesan dari Owner:**\n\n' + message, { parse_mode: 'Markdown' })
-            .then(() => successCount++)
-            .catch(e => console.error('Gagal kirim broadcast ke ' + user.id + ': ' + e.message));
-    });
-
-    setTimeout(() => {
-        bot.sendMessage(msg.chat.id, '✅ Broadcast selesai. Berhasil dikirim ke **' + successCount + '** user.', { parse_mode: 'Markdown' });
-    }, 5000);
-});
-
-bot.onText(/\/setactivemt (\d+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const id = parseInt(match[1]);
-    const mt_text = get_mt_text_by_id(id);
-
-    if (!mt_text) {
-        return bot.sendMessage(msg.chat.id, '❌ MT ID ' + id + ' tidak ditemukan.');
-    }
-
-    update_settings('active_mt_id', id);
-    bot.sendMessage(msg.chat.id, '✅ Teks Banding Aktif disetel ke **ID ' + id + '** (Subjek: ' + mt_text.subject + ')');
-});
-
-bot.onText(/\/offmt/, (msg) => {
-    if (!is_owner(msg.from.id)) return;
-    update_settings('active_mt_id', 0);
-    bot.sendMessage(msg.chat.id, '❌ Teks Banding berhasil **dinonaktifkan**.');
-});
-
-bot.onText(/\/getuser (\d+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const userId = parseInt(match[1]);
-    const user = get_user(userId);
-
-    const info = 
-'👤 **Detail User ID ' + userId + '**\n' +
-'Username: @' + user.username + '\n' +
-'Status: **' + user.status.toUpperCase() + '**\n' +
-'Banned: ' + (user.is_banned ? 'YA' : 'TIDAK') + '\n' +
-'Limit /fix: **' + user.fix_limit + 'x**\n' +
-'Poin Referral: **' + user.referral_points + '**\n' +
-'Terakhir /fix: ' + (user.last_fix ? new Date(user.last_fix).toLocaleString('id-ID') : 'Belum pernah') + '\n' +
-'Referred By: ' + (user.referred_by || 'N/A');
-
-    bot.sendMessage(msg.chat.id, info, { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/stats/, (msg) => {
-    if (!is_owner(msg.from.id)) return;
-    const users = get_all_users();
-    const totalUsers = users.length;
-    const premiumCount = users.filter(u => u.status === 'premium').length;
-    const ownerCount = users.filter(u => u.status === 'owner').length;
-    const bannedCount = users.filter(u => u.is_banned).length;
-
-    const stats = 
-'📊 **Statistik Bot**\n' +
-'Total User: **' + totalUsers + '**\n' +
-'Owner (Total): **' + ownerCount + '**\n' +
-'Premium: **' + premiumCount + '**\n' +
-'Banned: **' + bannedCount + '**';
-
-    bot.sendMessage(msg.chat.id, stats, { parse_mode: 'Markdown' });
-});
-
-bot.onText(/\/setmt (.+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const parts = match[1].split('|').map(p => p.trim());
-
-    if (parts.length < 3) {
-        return bot.sendMessage(msg.chat.id, '❌ Format salah. Gunakan: `/setmt <email_tujuan> | <subjek> | <isi pesan>`');
-    }
-
-    const [to_email, subject, body] = parts;
-
-    if (!body.includes('{nomor}')) {
-        return bot.sendMessage(msg.chat.id, '❌ Isi pesan wajib mengandung `{nomor}` untuk placeholder nomor WhatsApp.');
-    }
-
-    let mt_texts = get_mt_texts();
-    const newId = mt_texts.length > 0 ? mt_texts[mt_texts.length - 1].id + 1 : 1;
-
-    mt_texts.push({ id: newId, to_email, subject, body });
-    write_db(CONFIG.MT_FILE, mt_texts);
-
-    bot.sendMessage(msg.chat.id, '✅ MT ID **' + newId + '** berhasil ditambahkan.\nSubjek: ' + subject + '\nEmail Tujuan: ' + to_email);
-});
-
-bot.onText(/\/delmt (\d+)/, (msg, match) => {
-    if (!is_owner(msg.from.id)) return;
-    const id = parseInt(match[1]);
-    let mt_texts = get_mt_texts();
-    const initial_length = mt_texts.length;
-    const mt_to_delete = mt_texts.find(mt => mt.id === id);
-
-    if (!mt_to_delete) {
-        return bot.sendMessage(msg.chat.id, '❌ MT ID ' + id + ' tidak ditemukan.');
-    }
-
-    if (id === active_mt_id) {
-        update_settings('active_mt_id', 0);
-        bot.sendMessage(msg.chat.id, '⚠️ MT ID ' + id + ' yang aktif telah dinonaktifkan.');
-    }
-
-    mt_texts = mt_texts.filter(mt => mt.id !== id);
-    write_db(CONFIG.MT_FILE, mt_texts);
-
-    bot.sendMessage(msg.chat.id, '✅ MT ID **' + id + '** (' + mt_to_delete.subject + ') berhasil dihapus.');
-});
-
-// ============================================================
-// 🎯 معالج الأزرار (Callback Query)
-// ============================================================
-
-bot.on('callback_query', async (callbackQuery) => {
-    const chatId = callbackQuery.message.chat.id;
-    const messageId = callbackQuery.message.message_id;
-    const data = callbackQuery.data;
-
-    if (!is_owner(callbackQuery.from.id) && data.startsWith('owner_')) {
-        return bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Anda bukan owner.', show_alert: true });
-    }
-
-    const editMenuCaption = async (text, markup) => {
-        const params = {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'Markdown',
-            reply_markup: markup
-        };
-
+bot.on('callback_query', async (call) => {
+    const chatId = call.message.chat.id;
+    const msgId = call.message.message_id;
+    const data = call.data;
+
+    const edit = async (text, keyboard) => {
         try {
-            await bot.editMessageCaption(text, params);
+            await bot.editMessageCaption(text, {
+                chat_id: chatId,
+                message_id: msgId,
+                parse_mode: 'Markdown',
+                reply_markup: keyboard
+            });
         } catch (e) {
-            if (e.message.includes('message caption is empty') || e.message.includes('there is no text in the message to edit')) {
-                try {
-                    await bot.editMessageText(text, params);
-                } catch (e2) {
-                    if (!e2.message.includes('message is not modified')) {
-                        throw e2;
-                    }
-                }
-            } else if (!e.message.includes('message is not modified')) {
-                throw e;
+            if (!e.message.includes('not modified')) {
+                console.log('Edit error:', e.message);
             }
         }
     };
 
     try {
-        switch (data) {
-            case 'support':
-                await editMenuCaption('💖 Semua support terbaik saya adalah: Allah SWT, Ayah, Ibu, dan semua user setia bot ini.',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'start' }]] });
-                break;
+        // ===== القائمة الرئيسية =====
+        if (data === 'fix_menu') {
+            const user = get_user(call.from.id);
+            await edit('✅ **Fix Merah**\n\nLimit: **' + user.fix_limit + 'x**\nCooldown: **' + (cooldown_duration/60000) + ' menit**\n\nGunakan `/fix +62812xxxx`', 
+                { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'back' }]] });
+            return;
+        }
 
-            case 'tutorial':
-                await editMenuCaption('📝 **Tutorial Banding Email**\n\nGunakan fitur `/fix <nomor>` (cth: `/fix +62812xxxx`). Balasan dari WhatsApp akan otomatis dicek dan dikirim ke chat ini.',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'start' }]] });
-                break;
+        if (data === 'tutorial') {
+            await edit('📝 **Tutorial**\n\nGunakan `/fix +62812xxxx`\nBalasan akan otomatis masuk.', 
+                { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'back' }]] });
+            return;
+        }
 
-            case 'fix_merah_menu':
-                const user = get_user(callbackQuery.from.id);
-                const cd_indv = cooldown_duration / 60000;
-                await editMenuCaption('⚙️ **Fitur Fix Merah**\n\nLimit Anda: **' + user.fix_limit + 'x**\nCooldown Individu: **' + cd_indv + ' menit**.\n\nGunakan perintah `/fix <nomor>` (cth: `/fix +62812xxxx`) untuk mengirim banding otomatis.',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'start' }]] });
-                break;
+        if (data === 'back') {
+            const user = get_user(call.from.id);
+            const botInfo = await bot.getMe();
+            const link = 'https://t.me/' + botInfo.username + '?start=' + call.from.id;
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '✅ Fix Merah', callback_data: 'fix_menu' }],
+                    [{ text: '📝 Tutorial', callback_data: 'tutorial' }]
+                ]
+            };
+            if (isOwner(call.from.id)) {
+                keyboard.inline_keyboard.push([{ text: '⚙️ Admin Panel', callback_data: 'admin_panel' }]);
+            }
+            await edit('👋 Halo ' + user.username + '!\n\nID: `' + call.from.id + '`\nStatus: **' + user.status.toUpperCase() + '**\nLimit: **' + user.fix_limit + 'x**\nLink: `' + link + '`', keyboard);
+            return;
+        }
 
-            case 'owner_menu':
-                const current_active_mt = active_mt_id > 0 ? 'ID **' + active_mt_id + '**' : '❌ NON-AKTIF';
-                const owner_keyboard = {
-                    inline_keyboard: [
-                        [{ text: 'Status Email Aktif', callback_data: 'owner_email_status' }],
-                        [{ text: 'Kelola Email (Multi)', callback_data: 'owner_email_menu' }],
-                        [{ text: 'Kelola MT Text', callback_data: 'owner_mt_menu' }],
-                        [{ text: 'Kelola Grup & CD Grup', callback_data: 'owner_group_menu' }],
-                        [{ text: 'Kelola Owner', callback_data: 'owner_owner_menu' }],
-                        [{ text: 'List All User', callback_data: 'owner_list_user' }],
-                        [{ text: 'History Fix', callback_data: 'owner_history_fix' }],
-                        [{ text: 'Broadcast All User', callback_data: 'owner_broadcast_menu' }],
-                        [{ text: 'Kelola Premium & Akses', callback_data: 'owner_access_menu' }],
-                        [{ text: 'Set CD Individu', callback_data: 'owner_setcd_menu' }],
-                        [{ text: '↩️ Kembali', callback_data: 'start' }]
-                    ]
-                };
-                await editMenuCaption('⚙️ **Owner Menu**\n\nMT Aktif Saat Ini: ' + current_active_mt, owner_keyboard);
-                break;
+        // ===== Admin Panel =====
+        if (data === 'admin_panel') {
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '📧 Kelola Email', callback_data: 'admin_email' }],
+                    [{ text: '📝 Kelola MT', callback_data: 'admin_mt' }],
+                    [{ text: '👥 Kelola User', callback_data: 'admin_user' }],
+                    [{ text: '📊 Statistik', callback_data: 'admin_stats' }],
+                    [{ text: '↩️ Kembali', callback_data: 'back' }]
+                ]
+            };
+            await edit('👑 **Admin Panel**\n\nPilih menu:', keyboard);
+            return;
+        }
 
-            case 'owner_email_status':
-                const creds_status = get_active_email_creds();
-                let active_id_text;
-                if (active_email_id === 0) {
-                    active_id_text = 'ID 0 (Default Config)';
-                } else {
-                    const emails = read_db('emails.json');
-                    const active_email_obj = emails.find(e => e.id === active_email_id);
-                    if (active_email_obj) {
-                        active_id_text = 'ID ' + active_email_id;
-                    } else {
-                        update_settings('active_email_id', 0);
-                        active_id_text = 'ID 0 (Default Config). ID lama ' + active_email_id + ' tidak ditemukan dan direset.';
-                    }
+        // ===== إدارة البريد =====
+        if (data === 'admin_email') {
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '📧 Tambah Email', callback_data: 'admin_add_email' }],
+                    [{ text: '📋 Daftar Email', callback_data: 'admin_list_email' }],
+                    [{ text: '🔄 Set Active', callback_data: 'admin_set_email' }],
+                    [{ text: '↩️ Kembali', callback_data: 'admin_panel' }]
+                ]
+            };
+            await edit('📧 **Kelola Email**', keyboard);
+            return;
+        }
+
+        if (data === 'admin_add_email') {
+            await bot.sendMessage(chatId, '📧 Kirim: `email|app_password`');
+            bot.once('message', async (m) => {
+                if (!m.text || !m.text.includes('|')) {
+                    return bot.sendMessage(chatId, '❌ Format: email|password');
                 }
-                await editMenuCaption('📧 **Status Email Aktif**\n\nEmail Aktif: `' + creds_status.user + '`\nID Aktif: **' + active_id_text + '**',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_menu' }]] });
-                break;
-
-            case 'owner_group_menu':
-                await editMenuCaption('👥 **Kelola Grup & Cooldown Grup**\n\n\\* Bot hanya akan merespon /fix di grup yang sudah terdaftar.\n\n**Perintah Grup:**\n- `/addgroup` (di dalam grup)\n- `/delgroup` (di dalam grup)\n- `/setgroupcd <menit>` (di dalam grup)\n- `/listgroups`',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_menu' }]] });
-                break;
-
-            case 'owner_owner_menu':
-                const owners = get_owners();
-                const ownerList = owners.map(id => is_owner(id) && id === CONFIG.OWNER_ID ? '👑 ID ' + id + ' (Utama)' : '👤 ID ' + id).join('\n');
-                await editMenuCaption('👑 **Kelola Owner Bot**\n\nOwner saat ini:\n' + ownerList + '\n\n**Perintah Owner:**\n- `/addown <id_user>`\n- `/delown <id_user>`',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_menu' }]] });
-                break;
-
-            case 'owner_email_menu':
-                const email_menu_keyboard = {
-                    inline_keyboard: [
-                        [{ text: 'List/Set Active Email', callback_data: 'owner_list_email_menu' }],
-                        [{ text: 'Tambah Email Baru', callback_data: 'owner_add_email_menu' }],
-                        [{ text: '↩️ Kembali', callback_data: 'owner_menu' }]
-                    ]
-                };
-                await editMenuCaption('📧 **Kelola Email Multi-Akun**', email_menu_keyboard);
-                break;
-
-            case 'owner_list_email_menu':
-                await editMenuCaption('📧 **List/Set Active Email**\n\nLihat semua email terdaftar: `/listemails`\nAtur email aktif: `/setactiveemail <id>`\n\n*ID 0 adalah email dari config.js.*',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_email_menu' }]] });
-                break;
-
-            case 'owner_add_email_menu':
-                await editMenuCaption('📧 **Tambah Email Baru**\n\nGunakan format: `/addemail <email> <app_password>`\n\n*Wajib menggunakan App Password Gmail. Pastikan IMAP aktif!*',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_email_menu' }]] });
-                break;
-
-            case 'owner_list_user':
-                const users_list = get_all_users();
-                const userText = users_list.map(r => '**ID:** ' + r.id + ', **@' + r.username + '**, Status: ' + r.status + ', Limit: ' + r.fix_limit + 'x, Poin: ' + r.referral_points).join('\n');
-                await editMenuCaption('👤 **List Semua User**\n\n' + userText,
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_menu' }]] });
-                break;
-
-            case 'owner_history_fix':
-                const history = read_db(CONFIG.HISTORY_DB).filter(r => r.command.startsWith('/fix')).slice(-20).reverse();
-                const historyText = history.map(r => '[' + r.timestamp.split('T')[0] + '] **@' + r.username + '** menggunakan ' + r.command).join('\n');
-                await editMenuCaption('📜 **Riwayat Fix Terbaru**\n\n' + (historyText || 'Tidak ada riwayat.'),
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_menu' }]] });
-                break;
-
-            case 'owner_broadcast_menu':
-                await editMenuCaption('📢 **Broadcast**\n\nGunakan perintah: `/owner_broadcast <pesan>`',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_menu' }]] });
-                break;
-
-            case 'owner_mt_menu':
-                const mt_keyboard = {
-                    inline_keyboard: [
-                        [{ text: 'Lihat MT', callback_data: 'owner_view_mt' }],
-                        [{ text: 'Aktifkan/Nonaktifkan MT', callback_data: 'owner_set_active_menu' }],
-                        [{ text: 'Tambah MT', callback_data: 'owner_add_mt_menu' }],
-                        [{ text: 'Hapus MT', callback_data: 'owner_del_mt_menu' }],
-                        [{ text: '↩️ Kembali', callback_data: 'owner_menu' }]
-                    ]
-                };
-                await editMenuCaption('📝 **Kelola MT Text**', mt_keyboard);
-                break;
-
-            case 'owner_set_active_menu':
-                const current_active_status = active_mt_id > 0 ? 'MT ID **' + active_mt_id + '** (Aktif)' : 'Tidak ada (Non-Aktif)';
-                await editMenuCaption('▶️ **Aktifkan/Nonaktifkan Teks Banding**\n\nStatus: ' + current_active_status + '\n\n➡️ **AKTIFKAN:** Gunakan perintah `/setactivemt <id_mt>`\n➡️ **NONAKTIFKAN:** Gunakan perintah `/offmt`',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_mt_menu' }]] });
-                break;
-
-            case 'owner_view_mt':
-                const mt_texts_view = get_mt_texts();
-                const viewText = mt_texts_view.map(mt => '**ID:** ' + mt.id + '\n**Subjek:** ' + mt.subject + '\n**Email Tujuan:** ' + mt.to_email + '\n**Body Snippet:** ' + mt.body.substring(0, 50).replace(/\n/g, ' ') + '...').join('\n\n');
-                await editMenuCaption('📝 **Daftar MT**\n\n' + (viewText || 'Tidak ada MT yang tersedia.'),
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_mt_menu' }]] });
-                break;
-
-            case 'owner_add_mt_menu':
-                await editMenuCaption('📝 **Tambah Teks Banding**\n\nGunakan format: `/setmt <email_tujuan> | <subjek> | <isi pesan>`\n\n*Wajib sertakan `{nomor}` di isi pesan!*',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_mt_menu' }]] });
-                break;
-
-            case 'owner_del_mt_menu':
-                await editMenuCaption('📝 **Hapus Teks Banding**\n\nGunakan format: `/delmt <id_mt>`',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_mt_menu' }]] });
-                break;
-
-            case 'owner_access_menu':
-                await editMenuCaption('👮 **Kelola Akses & Premium**\n\n**Perintah Akses:**\n- `/addpremium <id_user>`\n- `/delprem <id_user>`\n- `/ban <id_user>`\n- `/unban <id_user>`',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_menu' }]] });
-                break;
-
-            case 'owner_setcd_menu':
-                const cd_current = cooldown_duration / 60000;
-                await editMenuCaption('⏳ **Atur Cooldown Individu**\n\nCooldown individu saat ini: **' + cd_current + ' menit**.\n\nGunakan perintah: `/setcd <menit>`',
-                    { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'owner_menu' }]] });
-                break;
-
-            case 'start':
-                await handleStart(callbackQuery.message, chatId, messageId);
-                break;
-
-            default:
-                console.log('Unknown callback:', data);
+                const [email, pass] = m.text.split('|').map(s => s.trim());
+                const emails = readDB('emails.json');
+                const newId = emails.length > 0 ? emails[emails.length - 1].id + 1 : 1;
+                emails.push({ id: newId, email, app_pass: pass });
+                writeDB('emails.json', emails);
+                bot.sendMessage(chatId, '✅ Email **' + email + '** ditambahkan (ID: ' + newId + ')');
+            });
+            return;
         }
+
+        if (data === 'admin_list_email') {
+            const emails = readDB('emails.json');
+            let txt = '📋 **Daftar Email**\n\n';
+            txt += 'ID 0: ' + CONFIG.EMAIL_SENDER + (active_email_id === 0 ? ' ✅' : '') + '\n';
+            emails.forEach(e => {
+                txt += 'ID ' + e.id + ': ' + e.email + (e.id === active_email_id ? ' ✅' : '') + '\n';
+            });
+            await edit(txt, { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'admin_email' }]] });
+            return;
+        }
+
+        if (data === 'admin_set_email') {
+            await bot.sendMessage(chatId, '📧 Kirim ID email (contoh: `1` atau `0` untuk default)');
+            bot.once('message', async (m) => {
+                const id = parseInt(m.text);
+                if (isNaN(id)) return bot.sendMessage(chatId, '❌ ID harus angka');
+                if (id === 0) {
+                    updateSettings('active_email_id', 0);
+                    return bot.sendMessage(chatId, '✅ Email default aktif');
+                }
+                const emails = readDB('emails.json');
+                const found = emails.find(e => e.id === id);
+                if (!found) return bot.sendMessage(chatId, '❌ ID tidak ditemukan');
+                updateSettings('active_email_id', id);
+                bot.sendMessage(chatId, '✅ Email **' + found.email + '** aktif');
+            });
+            return;
+        }
+
+        // ===== إدارة MT =====
+        if (data === 'admin_mt') {
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '📝 Tambah MT', callback_data: 'admin_add_mt' }],
+                    [{ text: '📋 Daftar MT', callback_data: 'admin_list_mt' }],
+                    [{ text: '🔄 Set Active', callback_data: 'admin_set_mt' }],
+                    [{ text: '↩️ Kembali', callback_data: 'admin_panel' }]
+                ]
+            };
+            await edit('📝 **Kelola MT**', keyboard);
+            return;
+        }
+
+        if (data === 'admin_add_mt') {
+            await bot.sendMessage(chatId, '📝 Kirim: `email_tujuan|subjek|isi_pesan`\n*Sertakan {nomor}*');
+            bot.once('message', async (m) => {
+                if (!m.text || !m.text.includes('|')) {
+                    return bot.sendMessage(chatId, '❌ Format: email|subjek|isi');
+                }
+                const [to, subject, body] = m.text.split('|').map(s => s.trim());
+                if (!body.includes('{nomor}')) {
+                    return bot.sendMessage(chatId, '❌ Wajib sertakan {nomor}');
+                }
+                const list = get_mt_texts();
+                const newId = list.length > 0 ? list[list.length - 1].id + 1 : 1;
+                list.push({ id: newId, to_email: to, subject, body });
+                writeDB(CONFIG.MT_FILE, list);
+                bot.sendMessage(chatId, '✅ MT ID **' + newId + '** ditambahkan');
+            });
+            return;
+        }
+
+        if (data === 'admin_list_mt') {
+            const list = get_mt_texts();
+            let txt = '📋 **Daftar MT**\n\n';
+            list.forEach(mt => {
+                txt += 'ID ' + mt.id + ': ' + mt.subject + ' → ' + mt.to_email + '\n';
+            });
+            if (!list.length) txt += 'Belum ada MT';
+            await edit(txt, { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'admin_mt' }]] });
+            return;
+        }
+
+        if (data === 'admin_set_mt') {
+            await bot.sendMessage(chatId, '📝 Kirim ID MT (contoh: `1` atau `0` untuk nonaktif)');
+            bot.once('message', async (m) => {
+                const id = parseInt(m.text);
+                if (isNaN(id)) return bot.sendMessage(chatId, '❌ ID harus angka');
+                if (id === 0) {
+                    updateSettings('active_mt_id', 0);
+                    return bot.sendMessage(chatId, '❌ MT dinonaktifkan');
+                }
+                const found = get_mt_by_id(id);
+                if (!found) return bot.sendMessage(chatId, '❌ ID tidak ditemukan');
+                updateSettings('active_mt_id', id);
+                bot.sendMessage(chatId, '✅ MT ID **' + id + '** aktif');
+            });
+            return;
+        }
+
+        // ===== إدارة المستخدمين =====
+        if (data === 'admin_user') {
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: '📋 Daftar User', callback_data: 'admin_list_users' }],
+                    [{ text: '🚫 Ban', callback_data: 'admin_ban' }],
+                    [{ text: '🟢 Unban', callback_data: 'admin_unban' }],
+                    [{ text: '↩️ Kembali', callback_data: 'admin_panel' }]
+                ]
+            };
+            await edit('👥 **Kelola User**', keyboard);
+            return;
+        }
+
+        if (data === 'admin_list_users') {
+            const users = get_all_users();
+            let txt = '📋 **Daftar User**\n\n';
+            users.slice(0, 20).forEach(u => {
+                txt += 'ID: ' + u.id + ' | @' + u.username + ' | ' + u.status + ' | Limit: ' + u.fix_limit + 'x\n';
+            });
+            await edit(txt, { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'admin_user' }]] });
+            return;
+        }
+
+        if (data === 'admin_ban') {
+            await bot.sendMessage(chatId, '🚫 Kirim ID user untuk di-ban');
+            bot.once('message', async (m) => {
+                const id = parseInt(m.text);
+                if (isNaN(id)) return bot.sendMessage(chatId, '❌ ID harus angka');
+                if (isOwner(id)) return bot.sendMessage(chatId, '❌ Tidak bisa ban Owner');
+                const user = get_user(id);
+                user.is_banned = 1;
+                save_user(user);
+                bot.sendMessage(chatId, '✅ User **' + id + '** di-ban');
+            });
+            return;
+        }
+
+        if (data === 'admin_unban') {
+            await bot.sendMessage(chatId, '🟢 Kirim ID user untuk di-unban');
+            bot.once('message', async (m) => {
+                const id = parseInt(m.text);
+                if (isNaN(id)) return bot.sendMessage(chatId, '❌ ID harus angka');
+                const user = get_user(id);
+                user.is_banned = 0;
+                save_user(user);
+                bot.sendMessage(chatId, '✅ User **' + id + '** di-unban');
+            });
+            return;
+        }
+
+        // ===== الإحصائيات =====
+        if (data === 'admin_stats') {
+            const users = get_all_users();
+            const total = users.length;
+            const banned = users.filter(u => u.is_banned).length;
+            const owners = users.filter(u => u.status === 'owner').length;
+            const mtCount = get_mt_texts().length;
+            const emailCount = readDB('emails.json').length;
+
+            const txt = 
+'📊 **Statistik**\n\n' +
+'👥 Total User: **' + total + '**\n' +
+'👑 Owner: **' + owners + '**\n' +
+'🚫 Banned: **' + banned + '**\n' +
+'📝 MT: **' + mtCount + '**\n' +
+'📧 Email: **' + emailCount + '**\n' +
+'⏱️ Cooldown: **' + (cooldown_duration/60000) + ' menit**';
+
+            await edit(txt, { inline_keyboard: [[{ text: '↩️ Kembali', callback_data: 'admin_panel' }]] });
+            return;
+        }
+
+        console.log('Unknown callback:', data);
+
     } catch (e) {
-        if (e.message.includes('message is not modified')) {
-            return bot.answerCallbackQuery(callbackQuery.id);
-        }
-        console.error('Error di callback query:', e);
-        return bot.answerCallbackQuery(callbackQuery.id, { text: '❌ Gagal memuat menu. Coba lagi dari /start. (' + e.message.split(':').pop().trim() + ')', show_alert: true });
+        console.error('Callback error:', e.message);
+        bot.answerCallbackQuery(call.id, { text: '❌ Error: ' + e.message, show_alert: true });
     }
-    await bot.answerCallbackQuery(callbackQuery.id);
+
+    bot.answerCallbackQuery(call.id);
 });
 
 // ============================================================
-// 🔄 فحص تلقائي كل 30 ثانية
+// 🚀 التشغيل
 // ============================================================
 
-console.log('🚀 Bot berjalan di Render (Database File JSON)...');
+console.log('🚀 Bot berjalan di Render...');
 
-setInterval(check_and_notify_users, 30000);
+setInterval(autoCheck, 30000);
