@@ -1,5 +1,5 @@
 // ============================================================
-// 🤖 محارب الابتزاز - البوت الأسطوري
+// 🤖 محارب الابتزاز - البوت المتكامل
 // ============================================================
 // 👤 المطور: @A_b_d_Tb
 // 📞 تواصل: @A_b_d_Tb - @A_b_d_Tb
@@ -31,44 +31,22 @@ const CONFIG = {
 
 const bot = new TelegramBot(CONFIG.TELEGRAM_TOKEN, { polling: true });
 
+// حذف Webhook تلقائي
+bot.deleteWebhook().then(() => {
+    console.log('✅ Webhook deleted');
+}).catch(() => {});
+
 // ============================================================
-// 🎨 تأثيرات الشفافية المتحركة (عشوائية)
+// 🎨 تأثيرات الشفافية (3 فقط)
 // ============================================================
 
 const effects = [
-    // شريط متحرك 1
-    { name: 'شريط متحرك 1', pattern: '▰'.repeat(15) + '▱'.repeat(15) },
-    // شريط متحرك 2
-    { name: 'شريط متحرك 2', pattern: '▓'.repeat(20) + '░'.repeat(20) },
-    // شريط متحرك 3
-    { name: 'شريط متحرك 3', pattern: '█'.repeat(10) + '▒'.repeat(10) + '█'.repeat(10) },
-    // نقاط متحركة
-    { name: 'نقاط متحركة', pattern: '•'.repeat(10) + '◦'.repeat(10) },
-    // تدرج
-    { name: 'تدرج', pattern: '▄'.repeat(5) + '▀'.repeat(5) + '▄'.repeat(5) + '▀'.repeat(5) },
-    // نجوم
-    { name: 'نجوم', pattern: '✦'.repeat(8) + '✧'.repeat(8) },
-    // أمواج
-    { name: 'أمواج', pattern: '～'.repeat(12) + '〜'.repeat(12) },
-    // سهام
-    { name: 'سهام', pattern: '▶'.repeat(8) + '◀'.repeat(8) },
-    // دوائر
-    { name: 'دوائر', pattern: '●'.repeat(10) + '○'.repeat(10) },
-    // مربعات
-    { name: 'مربعات', pattern: '■'.repeat(12) + '□'.repeat(12) }
+    '▰'.repeat(15) + '▱'.repeat(15),
+    '▄'.repeat(5) + '▀'.repeat(5) + '▄'.repeat(5) + '▀'.repeat(5),
+    '✦'.repeat(8) + '✧'.repeat(8)
 ];
 
-// دالة لجلب تأثير عشوائي
-const getRandomEffect = () => {
-    const randomIndex = Math.floor(Math.random() * effects.length);
-    return effects[randomIndex].pattern;
-};
-
-// دالة لجلب تأثير عشوائي مع اسمه
-const getRandomEffectWithName = () => {
-    const randomIndex = Math.floor(Math.random() * effects.length);
-    return effects[randomIndex];
-};
+const getEffect = () => effects[Math.floor(Math.random() * effects.length)];
 
 // ============================================================
 // 📁 دوال قاعدة البيانات
@@ -274,7 +252,7 @@ const autoCheck = async () => {
         const entry = history.filter(h => h.number_fixed === number).pop();
         if (!entry) return;
 
-        const effect = getRandomEffect();
+        const effect = getEffect();
         const msg = 
 effect + '\n' +
 '📣 **تم العثور على رد!**\n\n' +
@@ -323,10 +301,8 @@ bot.onText(/\/start/, async (msg) => {
     const botInfo = await bot.getMe();
     const link = 'https://t.me/' + botInfo.username + '?start=' + userId;
 
-    // الحصول على تأثير عشوائي
-    const effect = getRandomEffect();
+    const effect = getEffect();
 
-    // ===== القائمة الرئيسية =====
     const keyboard = {
         inline_keyboard: [
             [{ text: '✅ إرسال /fix', callback_data: 'fix_menu' }],
@@ -336,7 +312,6 @@ bot.onText(/\/start/, async (msg) => {
         ]
     };
 
-    // أزرار المشرف
     if (isOwner(userId)) {
         keyboard.inline_keyboard.push([
             [{ text: '⚙️ لوحة التحكم', callback_data: 'admin_panel' },
@@ -348,7 +323,6 @@ bot.onText(/\/start/, async (msg) => {
         ]);
     }
 
-    // ===== نص الترحيب =====
     const caption = 
 effect + '\n' +
 '🛡️ *محارب الابتزاز* 🛡️\n' +
@@ -413,7 +387,7 @@ bot.onText(/\/fix (.+)/, async (msg, match) => {
         }
         save_user(user);
 
-        const effect = getRandomEffect();
+        const effect = getEffect();
         bot.sendMessage(chatId, 
 effect + '\n' +
 '✅ تم إرسال الطلب للرقم ' + number + '\n' +
@@ -436,7 +410,7 @@ effect);
 });
 
 // ============================================================
-// 🎯 معالج الأزرار (Callback)
+// 🎯 معالج الأزرار
 // ============================================================
 
 bot.on('callback_query', async (call) => {
@@ -460,7 +434,7 @@ bot.on('callback_query', async (call) => {
         }
     };
 
-    const effect = getRandomEffect();
+    const effect = getEffect();
 
     try {
         // ===== القائمة الرئيسية =====
@@ -585,7 +559,7 @@ effect,
         }
 
         // ============================================================
-        // 👑 لوحة التحكم (Admin Panel)
+        // 👑 لوحة التحكم
         // ============================================================
 
         if (data === 'admin_panel') {
@@ -636,7 +610,7 @@ effect,
                 const newId = emails.length > 0 ? emails[emails.length - 1].id + 1 : 1;
                 emails.push({ id: newId, email, app_pass: pass });
                 writeDB('emails.json', emails);
-                const effect2 = getRandomEffect();
+                const effect2 = getEffect();
                 bot.sendMessage(chatId, 
 effect2 + '\n' +
 '✅ تمت إضافة البريد **' + email + '** (ID: ' + newId + ')\n' +
@@ -664,14 +638,14 @@ effect2);
                 if (isNaN(id)) return bot.sendMessage(chatId, '❌ يجب إرسال رقم');
                 if (id === 0) {
                     updateSettings('active_email_id', 0);
-                    const effect2 = getRandomEffect();
+                    const effect2 = getEffect();
                     return bot.sendMessage(chatId, effect2 + '\n✅ تم تفعيل البريد الافتراضي\n' + effect2);
                 }
                 const emails = readDB('emails.json');
                 const found = emails.find(e => e.id === id);
                 if (!found) return bot.sendMessage(chatId, '❌ البريد غير موجود');
                 updateSettings('active_email_id', id);
-                const effect2 = getRandomEffect();
+                const effect2 = getEffect();
                 bot.sendMessage(chatId, effect2 + '\n✅ تم تفعيل البريد **' + found.email + '**\n' + effect2);
             });
             return;
@@ -709,7 +683,7 @@ effect,
                 const newId = list.length > 0 ? list[list.length - 1].id + 1 : 1;
                 list.push({ id: newId, to_email: to, subject, body });
                 writeDB(CONFIG.MT_FILE, list);
-                const effect2 = getRandomEffect();
+                const effect2 = getEffect();
                 bot.sendMessage(chatId, effect2 + '\n✅ تمت إضافة القالب MT (ID: ' + newId + ')\n' + effect2);
             });
             return;
@@ -734,13 +708,13 @@ effect,
                 if (isNaN(id)) return bot.sendMessage(chatId, '❌ يجب إرسال رقم');
                 if (id === 0) {
                     updateSettings('active_mt_id', 0);
-                    const effect2 = getRandomEffect();
+                    const effect2 = getEffect();
                     return bot.sendMessage(chatId, effect2 + '\n❌ تم إلغاء تفعيل القالب\n' + effect2);
                 }
                 const found = get_mt_by_id(id);
                 if (!found) return bot.sendMessage(chatId, '❌ القالب غير موجود');
                 updateSettings('active_mt_id', id);
-                const effect2 = getRandomEffect();
+                const effect2 = getEffect();
                 bot.sendMessage(chatId, effect2 + '\n✅ تم تفعيل القالب (ID: ' + id + ')\n' + effect2);
             });
             return;
@@ -785,7 +759,7 @@ effect,
                 const user = get_user(id);
                 user.is_banned = 1;
                 save_user(user);
-                const effect2 = getRandomEffect();
+                const effect2 = getEffect();
                 bot.sendMessage(chatId, effect2 + '\n✅ تم حظر المستخدم **' + id + '**\n' + effect2);
             });
             return;
@@ -799,7 +773,7 @@ effect,
                 const user = get_user(id);
                 user.is_banned = 0;
                 save_user(user);
-                const effect2 = getRandomEffect();
+                const effect2 = getEffect();
                 bot.sendMessage(chatId, effect2 + '\n✅ تم إلغاء حظر المستخدم **' + id + '**\n' + effect2);
             });
             return;
@@ -847,7 +821,7 @@ effect;
 
 console.log('🛡️ محارب الابتزاز - يعمل على Render...');
 console.log('═══════════════════════════════════════════════');
-console.log('🎨 جميع التأثيرات تعمل بشكل عشوائي');
+console.log('🎨 3 تأثيرات فقط: شريط، تدرج، نجوم');
 console.log('👤 المطور: @A_b_d_Tb');
 console.log('📞 الدعم: @A_b_d_Tb - @A_b_d_Tb');
 console.log('═══════════════════════════════════════════════');
